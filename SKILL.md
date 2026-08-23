@@ -99,7 +99,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
    - 审批流（procedures.json 里绑定到本章表的启用流程）：`hac procedures get-procedure --procedure-id <id>` 拿版本 → `hac procedures get-procedure-version` 直读流程图环节。
    - 零散配置（计算公式、自动编号规则、字段显示条件、打印模板）：仅对需要向读者解释的字段跑 `hac --output-mode full table get-table --table-id <id>` / `hac table list-print-templates --table-id <id>` 提取。
    - 字段类型名以 `hac table field-config list-types` 为准，不凭印象写。
-   - **配置手册专用**：写"改动会影响什么"时查引用关系——字段被哪些自动化、公式、关联引用（子命令用 `hac table --help` 现查，不凭印象）；权限角色、页面配置 hac 覆盖不到的部分以界面实测为准。
+   - **配置手册专用**：写"改动会影响什么"时查引用关系：字段被哪些自动化、公式、关联引用（子命令用 `hac table --help` 现查，不凭印象）；权限角色、页面配置 hac 覆盖不到的部分以界面实测为准。
 3. **浏览器走查 + 截图**，全按 [references/walkthrough-guide.md](references/walkthrough-guide.md) 执行：先从摘要包推导本章的截图点位清单（配置手册的点位是配置入口和编辑界面，密度低于使用手册），再按「看 → 动 → 看 → 截」循环走查。截图存 `<产出目录>/images/`，界面观察记 `notes.md`，落的演示数据登记 `demo-data.md`。
 4. **业务流程章先出流程图**（仅使用手册）：从摘要包和实测流程写 flow.json，`python3 scripts/flow.py flow.json images/<章号>-0-<流程名>.svg`，放章开篇。
 5. **写本章 Markdown**：使用手册按 writing-guide，配置手册按 config-writing-guide，含配图规范。图放进它对应的步骤条目里（列表项下缩进 4 空格），用相对路径引用。**本章写完的标准**：每个操作序列配齐入口图、过程图、结果图（能合并的合并），每张图挂在它对应的步骤下、框对准该步骤的控件；对照 notes.md 登记的截图逐步骤核对，缺图现在回走查补截，不欠到自检。
