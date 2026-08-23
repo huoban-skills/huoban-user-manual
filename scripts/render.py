@@ -6,7 +6,7 @@
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
-入口图必须有标注框），
+入口图必须有标注框、核对类步骤有图或图引用），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -114,7 +114,7 @@ def has_box(path: Path):
     try:
         im = Image.open(path).convert("RGB")
         im.thumbnail((500, 500))
-        for r, g, b in im.getdata():
+        for _, (r, g, b) in im.getcolors(maxcolors=500 * 500) or []:
             for ar, ag, ab in ACCENTS:
                 if abs(r - ar) <= 28 and abs(g - ag) <= 30 and abs(b - ab) <= 30:
                     return True
@@ -161,13 +161,17 @@ def check(md: str, base: Path) -> list:
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
     sec_imgs = 0
+    pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现图或「如图」引用
 
     def flush_section():
-        nonlocal sec, sec_steps, sec_imgs
+        nonlocal sec, sec_steps, sec_imgs, pend
         if sec and sec_steps >= 2 and sec_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
                          f"操作序列至少要有入口图、过程图、结果图（能合并的合并）")
-        sec, sec_steps, sec_imgs = None, 0, 0
+        if pend:
+            probs.append(f"行{pend}: 核对类步骤点名了多个字段，但小节内此后没有配图，"
+                         f"文字里也没有「如图 X-Y」引用；补图或指给读者看")
+        sec, sec_steps, sec_imgs, pend = None, 0, 0, None
 
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
@@ -221,6 +225,7 @@ def check(md: str, base: Path) -> list:
         im = IMG_RE.match(line)
         if im:
             sec_imgs += 1
+            pend = None
             alt, src = im.group(1), im.group(2)
             mm = re.match(r"^图 (\d+)-(\d+)：(\S.*)$", alt)
             if not mm:
@@ -244,9 +249,18 @@ def check(md: str, base: Path) -> list:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：内部行话和元信息不进手册（环境缺陷、走查情况记 notes.md）")
 
-        sm = re.match(r"^(\d+)\.\s+", line)
+        if pend and re.search(r"[如同见]图\s?\d+-\d+", line):
+            pend = None
+
+        sm = re.match(r"^(\d+)\.\s+(.*)$", line)
         if sm:
             sec_steps += 1
+            stext = sm.group(2)
+            if (not in_scenario_ch and stext.count("、") >= 1
+                    and re.search(r"查看|核对|确认|检查", stext)
+                    and "无误" not in stext
+                    and not re.search(r"[如同见]图\s?\d+-\d+", stext)):
+                pend = ln
             if step_expect == 0:
                 step_expect = 1
             if int(sm.group(1)) != step_expect:
