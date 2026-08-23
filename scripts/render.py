@@ -5,7 +5,8 @@
   python3 render.py <文档.md> [输出.html]      # 省略输出则同名 .html
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
-图片相对路径且存在），有问题逐条打印并以退出码 2 结束；机检规则见 check()。
+图片相对路径且存在、操作小节图文对应），有问题逐条打印并以退出码 2 结束；
+机检规则见 check()。
 
 Markdown 约定（与 writing-guide 一致，只认这些）：
   # 标题            册头/篇名；紧随其后的第一段渲染为导语，自动插目录
@@ -128,6 +129,19 @@ def check(md: str, base: Path) -> list:
     step_expect = 0   # 当前步骤块的下一个期望序号；0 = 不在步骤块里
     in_code = False
 
+    # 操作小节的图文对应：有步骤没配图的小节要报出来（字段说明等纯参考小节除外）
+    NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
+    sec = None        # (行号, 小节标题) 仅操作小节
+    sec_steps = 0
+    sec_imgs = 0
+
+    def flush_section():
+        nonlocal sec, sec_steps, sec_imgs
+        if sec and sec_steps >= 2 and sec_imgs == 0:
+            probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
+                         f"操作序列至少要有入口图、过程图、结果图（能合并的合并）")
+        sec, sec_steps, sec_imgs = None, 0, 0
+
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
         if line.lstrip().startswith("```"):
@@ -140,6 +154,10 @@ def check(md: str, base: Path) -> list:
         if m:
             step_expect = 0
             level, title = len(m.group(1)), m.group(2).strip()
+            if level in (2, 3):
+                flush_section()
+            if level == 3 and not any(k in title for k in NO_IMG_OK):
+                sec = (ln, title)
             if level == 1:
                 h1_count += 1
                 if h1_count > 1:
@@ -169,6 +187,7 @@ def check(md: str, base: Path) -> list:
 
         im = IMG_RE.match(line)
         if im:
+            sec_imgs += 1
             alt, src = im.group(1), im.group(2)
             mm = re.match(r"^图 (\d+)-(\d+)：(\S.*)$", alt)
             if not mm:
@@ -187,6 +206,7 @@ def check(md: str, base: Path) -> list:
 
         sm = re.match(r"^(\d+)\.\s+", line)
         if sm:
+            sec_steps += 1
             if step_expect == 0:
                 step_expect = 1
             if int(sm.group(1)) != step_expect:
@@ -195,6 +215,7 @@ def check(md: str, base: Path) -> list:
         elif line.strip() and not line.startswith("    "):
             step_expect = 0
 
+    flush_section()
     return probs
 
 
