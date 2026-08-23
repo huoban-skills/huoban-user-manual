@@ -129,8 +129,10 @@ def check(md: str, base: Path) -> list:
     step_expect = 0   # 当前步骤块的下一个期望序号；0 = 不在步骤块里
     in_code = False
 
-    # 操作小节的图文对应：有步骤没配图的小节要报出来（字段说明等纯参考小节除外）
+    # 操作小节的图文对应：有步骤没配图的小节要报出来。
+    # 豁免：字段说明等纯参考小节，以及典型业务场景章（跨章串联，不强制配图）。
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
+    in_scenario_ch = False   # 当前是否在「典型业务场景」章内
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
     sec_imgs = 0
@@ -156,7 +158,9 @@ def check(md: str, base: Path) -> list:
             level, title = len(m.group(1)), m.group(2).strip()
             if level in (2, 3):
                 flush_section()
-            if level == 3 and not any(k in title for k in NO_IMG_OK):
+            if level == 2:
+                in_scenario_ch = "典型业务场景" in title
+            if level == 3 and not in_scenario_ch and not any(k in title for k in NO_IMG_OK):
                 sec = (ln, title)
             if level == 1:
                 h1_count += 1
