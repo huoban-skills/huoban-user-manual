@@ -5,7 +5,8 @@
   python3 render.py <文档.md> [输出.html]      # 省略输出则同名 .html
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
-图片相对路径且存在、操作小节图文对应），有问题逐条打印并以退出码 2 结束；
+图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法），
+有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
 Markdown 约定（与 writing-guide 一致，只认这些）：
@@ -132,6 +133,8 @@ def check(md: str, base: Path) -> list:
     # 操作小节的图文对应：有步骤没配图的小节要报出来。
     # 豁免：字段说明等纯参考小节，以及典型业务场景章（跨章串联，不强制配图）。
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
+    # 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔
+    LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在")
     in_scenario_ch = False   # 当前是否在「典型业务场景」章内
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
@@ -160,6 +163,10 @@ def check(md: str, base: Path) -> list:
                 flush_section()
             if level == 2:
                 in_scenario_ch = "典型业务场景" in title
+            if level == 3 and in_scenario_ch and not any(k in title for k in NO_IMG_OK):
+                bare = re.sub(r"^\d+\.\d+\s+", "", title)
+                if not bare.endswith(("？", "?")):
+                    probs.append(f"行{ln}: 典型业务场景的小节「{title}」要用一线员工的真实问法命名（以问号结尾），不用归纳式标题")
             if level == 3 and not in_scenario_ch and not any(k in title for k in NO_IMG_OK):
                 sec = (ln, title)
             if level == 1:
@@ -207,6 +214,10 @@ def check(md: str, base: Path) -> list:
             elif not (base / src).exists():
                 probs.append(f"行{ln}: 图片文件不存在：{src}")
             continue
+
+        for w in LEAKS:
+            if w in line:
+                probs.append(f"行{ln}: 正文出现「{w}」：内部行话和元信息不进手册（环境缺陷、走查情况记 notes.md）")
 
         sm = re.match(r"^(\d+)\.\s+", line)
         if sm:
