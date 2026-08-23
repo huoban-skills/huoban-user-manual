@@ -5,7 +5,8 @@
   python3 render.py <文档.md> [输出.html]      # 省略输出则同名 .html
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
-图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法），
+图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
+入口图必须有标注框），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -99,6 +100,27 @@ if(toc){document.querySelectorAll('h2[id]').forEach(h=>{
 IMG_RE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$")
 
 CN_NUM = "零一二三四五六七八九"
+
+# 标注框的颜色（当前珊瑚色 + 旧版红），用于机检"图注说要点这里，图上却没画框"
+ACCENTS = ((217, 119, 87), (225, 37, 27), (245, 34, 45))
+
+
+def has_box(path: Path):
+    """图里有没有标注框颜色。返回 True/False；PIL 缺失或非 PNG 返回 None（跳过检查）。"""
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    try:
+        im = Image.open(path).convert("RGB")
+        im.thumbnail((500, 500))
+        for r, g, b in im.getdata():
+            for ar, ag, ab in ACCENTS:
+                if abs(r - ar) <= 28 and abs(g - ag) <= 30 and abs(b - ab) <= 30:
+                    return True
+        return False
+    except Exception:
+        return None
 
 
 def cn2int(s: str):
@@ -213,6 +235,9 @@ def check(md: str, base: Path) -> list:
                 probs.append(f"行{ln}: 图片「{src}」必须用相对路径（images/…）")
             elif not (base / src).exists():
                 probs.append(f"行{ln}: 图片文件不存在：{src}")
+            elif re.search(r"入口|按钮|点[「击开]", alt) and src.lower().endswith(".png"):
+                if has_box(base / src) is False:
+                    probs.append(f"行{ln}: 图注「{alt}」说的是入口/点击，但图上没有画标注框")
             continue
 
         for w in LEAKS:
