@@ -119,8 +119,8 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 - **digest.py**：读采集目录落盘文件，输出章节摘要包 Markdown。AI 只读它的输出，不读原始 JSON。用法：`python3 scripts/digest.py --dir <采集目录> --tables "表名A,表名B"`。
 - **flow.py**：册头全流程图（一册一张），flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。
 - **render.py**：Markdown → HTML 预览（Linear 浅色皮肤，零依赖零 token）。md 写法约定见脚本头注释。
-- **annotate.py**：按百分比坐标给截图画标注框、模糊、遮挡、裁剪。browser.py 的 CSS 选择器在控制台类 SPA 匹配不上时用它；没先 `--grid` 量过就画会直接报错。多个 `--box` 自动按传入顺序标序号角标。
-- **browser.py**：浏览器走查驱动，每个子命令独立执行、窗口跨命令常驻。子命令清单（start / status / page / goto / snapshot / click / type / fill / press / scroll / wait / shot / eval / stop）和参数见脚本头注释；`shot` 的 `--highlight` 多框自动标序号，`--blur` / `--mask` 对应模糊与不可逆遮挡。
+- **annotate.py**：按百分比坐标给截图画标注框、模糊、裁剪。browser.py 的 CSS 选择器在控制台类 SPA 匹配不上时用它；没先 `--grid` 量过就画会直接报错。多个 `--box` 自动按传入顺序标序号角标。
+- **browser.py**：浏览器走查驱动，每个子命令独立执行、窗口跨命令常驻。子命令清单（start / status / page / goto / snapshot / click / type / fill / press / scroll / wait / shot / eval / stop）和参数见脚本头注释；`shot` 的 `--highlight` 多框自动标序号，`--blur` 做模糊脱敏。
 
 ## CLI 铁律
 
