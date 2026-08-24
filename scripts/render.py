@@ -7,7 +7,7 @@
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
 入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用、
-册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体），
+册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -313,6 +313,12 @@ def check(md: str, base: Path) -> list:
                     probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
                                  f"重新框选让它整个落在画面内")
             continue
+
+        if line.lstrip().startswith("|"):
+            cells = [c.strip().strip("*") for c in line.strip().strip("|").split("|")]
+            if cells and cells[0] == "字段" and cells != ["字段", "字段说明", "填写说明"]:
+                probs.append(f"行{ln}: 字段表列头是「{' | '.join(cells)}」，"
+                             f"规范是「字段 | 字段说明 | 填写说明」（字段说明讲业务含义，填写说明写必填/选填/自动计算）")
 
         if "常见问题" in section_title and re.match(r"^\*?\*?[QA][：:]", line.strip()):
             probs.append(f"行{ln}: 常见问题不用 Q/A 前缀，问题写成加粗编号行「**1. 问题？**」，答案直接跟在下面")
