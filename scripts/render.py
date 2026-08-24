@@ -5,7 +5,7 @@
   python3 render.py <文档.md> [输出.html]      # 省略输出则同名 .html
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
-图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
+图片相对路径且存在、操作小节图文对应、内部行话不入正文、
 入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用、
 册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头），
 有问题逐条打印并以退出码 2 结束；
@@ -187,12 +187,10 @@ def check(md: str, base: Path) -> list:
     step_expect = 0   # 当前步骤块的下一个期望序号；0 = 不在步骤块里
     in_code = False
 
-    # 操作小节的图文对应：有步骤没配图的小节要报出来。
-    # 豁免：字段说明等纯参考小节，以及典型业务场景章（跨章串联，不强制配图）。
+    # 操作小节的图文对应：有步骤没配图的小节要报出来（字段说明等纯参考小节豁免）。
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
     # 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔
     LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：")
-    in_scenario_ch = False   # 当前是否在「典型业务场景」章内
     section_title = ""       # 当前 h3 小节标题，用于常见问题格式检查
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
@@ -223,17 +221,11 @@ def check(md: str, base: Path) -> list:
             level, title = len(m.group(1)), m.group(2).strip()
             if level in (2, 3):
                 flush_section()
-            if level == 2:
-                in_scenario_ch = "典型业务场景" in title
-            if level == 3 and in_scenario_ch and not any(k in title for k in NO_IMG_OK):
-                bare = re.sub(r"^\d+\.\d+\s+", "", title)
-                if not bare.endswith(("？", "?")):
-                    probs.append(f"行{ln}: 典型业务场景的小节「{title}」要用一线员工的真实问法命名（以问号结尾），不用归纳式标题")
             if level == 3:
                 section_title = title
             if level == 2:
                 section_title = ""
-            if level == 3 and not in_scenario_ch and not any(k in title for k in NO_IMG_OK):
+            if level == 3 and not any(k in title for k in NO_IMG_OK):
                 sec = (ln, title)
             if level == 1:
                 h1_count += 1
@@ -334,7 +326,7 @@ def check(md: str, base: Path) -> list:
         if sm:
             sec_steps += 1
             stext = sm.group(2)
-            if (not in_scenario_ch and stext.count("、") >= 1
+            if (stext.count("、") >= 1
                     and re.search(r"查看|核对|确认|检查", stext)
                     and "无误" not in stext
                     and not re.search(r"[如同见]图\s?\d+-\d+", stext)):
