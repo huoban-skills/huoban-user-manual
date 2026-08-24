@@ -415,7 +415,7 @@ HIGHLIGHT_ON = """
     box.appendChild(m);
     if (rects.length > 1) {
       const b = document.createElement('div');
-      b.style.cssText = `position:absolute;left:${r.left - 15}px;top:${r.top - 15}px;` +
+      b.style.cssText = `position:absolute;left:${Math.max(2, r.left - 15)}px;top:${Math.max(2, r.top - 15)}px;` +
         'width:22px;height:22px;border-radius:50%;background:#D97757;color:#fff;' +
         'box-shadow:0 0 0 2px #fff;display:flex;align-items:center;justify-content:center;' +
         'font:bold 13px -apple-system,sans-serif';

@@ -108,14 +108,18 @@ def annotate(path, boxes, fills, blurs, crop, blur_radius=None):
                                  radius=corner, outline=SHADOW, width=lw + 2)
         base = Image.alpha_composite(base, shadow.filter(ImageFilter.GaussianBlur(3)))
         d = ImageDraw.Draw(base)
+        br = max(12, w // 110)
         for i, b in enumerate(boxes):
             r = _rect(b, w, h)
+            # 内缩到画布内：框和角标画出图外会被截断，读者看到半个框、半个序号
+            m = lw + 2 + (br + 2 if len(boxes) > 1 else 0)
+            r = [min(max(r[0], m), w - lw - 2), min(max(r[1], m), h - lw - 2),
+                 min(max(r[2], m), w - lw - 2), min(max(r[3], m), h - lw - 2)]
             d.rounded_rectangle([r[0] - lw, r[1] - lw, r[2] + lw, r[3] + lw],
                                 radius=corner + lw, outline="#ffffff", width=lw + 2)
             d.rounded_rectangle(r, radius=corner, outline=ACCENT, width=lw)
             if len(boxes) > 1:
                 # 多框按传入顺序标序号角标，贴框左上角；含义写在步骤文字里
-                br = max(12, w // 110)
                 cx, cy = r[0], r[1]
                 d.ellipse([cx - br - 2, cy - br - 2, cx + br + 2, cy + br + 2], fill="#ffffff")
                 d.ellipse([cx - br, cy - br, cx + br, cy + br], fill=ACCENT)

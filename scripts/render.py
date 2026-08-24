@@ -6,7 +6,7 @@
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
-入口图必须有标注框、核对类步骤有图或图引用），
+入口图必须有标注框、标注不出界、核对类步骤有图或图引用），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -103,6 +103,30 @@ CN_NUM = "零一二三四五六七八九"
 
 # 标注框的颜色（当前珊瑚色 + 旧版红），用于机检"图注说要点这里，图上却没画框"
 ACCENTS = ((217, 119, 87), (225, 37, 27), (245, 34, 45))
+
+
+def box_clipped(path: Path):
+    """标注框或序号角标是否画出了图外（图片最外圈出现标注色即判定截断）。"""
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    try:
+        im = Image.open(path).convert("RGB")
+        w, h = im.size
+        px = im.load()
+        edge = 3
+        for y in range(h):
+            for x in range(w):
+                if x >= edge and x < w - edge and y >= edge and y < h - edge:
+                    continue
+                r, g, b = px[x, y]
+                for ar, ag, ab in ACCENTS:
+                    if abs(r - ar) <= 28 and abs(g - ag) <= 30 and abs(b - ab) <= 30:
+                        return True
+        return False
+    except Exception:
+        return None
 
 
 def has_box(path: Path):
@@ -247,9 +271,12 @@ def check(md: str, base: Path) -> list:
                 probs.append(f"行{ln}: 图片「{src}」必须用相对路径（images/…）")
             elif not (base / src).exists():
                 probs.append(f"行{ln}: 图片文件不存在：{src}")
-            elif re.search(r"入口|按钮|点[「击开]", alt) and src.lower().endswith(".png"):
-                if has_box(base / src) is False:
+            elif src.lower().endswith(".png"):
+                if re.search(r"入口|按钮|点[「击开]", alt) and has_box(base / src) is False:
                     probs.append(f"行{ln}: 图注「{alt}」说的是入口/点击，但图上没有画标注框")
+                if box_clipped(base / src):
+                    probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
+                                 f"重新框选让它整个落在画面内")
             continue
 
         for w in LEAKS:
