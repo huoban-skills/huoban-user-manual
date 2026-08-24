@@ -1,6 +1,6 @@
 # 交付前自检清单
 
-生成后逐项过，全部通过才交用户审阅；能机检的错不留给用户。标注与脱敏的判定标准以 [walkthrough-guide.md](walkthrough-guide.md) 第四、五节为准，此处只列检查项。
+生成后逐项过，全部通过才交用户审阅；能机检的错不留给用户。标注与脱敏的判定标准以 [walkthrough-guide.md](walkthrough-guide.md) 第五节为准，此处只列检查项。
 
 ## 两轨通用
 
