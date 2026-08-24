@@ -7,7 +7,10 @@
   layout-<table_id>.json     hac table form-layout get --table-id <tid>   （可选，缺了按 facts 顺序）
 
 用法：
-  python3 digest.py --dir <采集目录> --tables "表名A,表名B"     # 表名或 table_id 混用均可
+  python3 digest.py --dir <采集目录> --tables "表名A,表名B" --outline <产出目录>/outline.md
+
+门闩：--outline 指向的 outline.md 必须存在且含用户确认标记 <!-- 用户已确认 -->，
+否则拒绝运行——阶段一的交付物是 outline.md 本身，先交用户确认再进阶段二。
 """
 
 from __future__ import annotations
@@ -135,7 +138,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True, help="采集目录（含 facts.json 等落盘文件）")
     ap.add_argument("--tables", required=True, help="表名或 table_id，逗号分隔")
+    ap.add_argument("--outline", required=True, help="产出目录里的 outline.md 路径（须含用户确认标记）")
     args = ap.parse_args()
+
+    outline = Path(args.outline)
+    if not outline.exists():
+        sys.exit("× outline.md 不存在。先完成阶段一：盘表盘页面、定章节清单，写进 outline.md。\n"
+                 "  阶段一的交付物就是 outline.md 本身：输出章节清单给用户，本次任务到此正常完成。")
+    if "<!-- 用户已确认 -->" not in outline.read_text(encoding="utf-8"):
+        sys.exit("× outline.md 还没有用户确认标记。\n"
+                 "  现在结束任务，把 outline.md 的章节清单展示给用户；这就是本次任务的完整交付。\n"
+                 "  用户回复确认后，在 outline.md 末尾加一行 <!-- 用户已确认 --> 再继续阶段二。")
 
     base = Path(args.dir)
     facts = load(base / "facts.json")
