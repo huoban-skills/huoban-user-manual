@@ -17,7 +17,8 @@ Markdown 约定（与 writing-guide 一致，只认这些）：
   **1. 问题？**      「常见问题」下的一条（加粗编号行），渲染成可折叠块；旧式 #### 问句兼容
   1. 步骤            有序列表；紧跟其后缩进 4 空格的图片/文字挂进这一条
       ![图 1-1：说明](images/1-1-x.png)
-      > 图 1-1：说明        图注行（引用块），与 alt 一致；md 里显示为灰色小字，HTML 里成 figcaption
+      <small style="color:#8A8F98">图 1-1：说明</small>
+                        图注行，与 alt 一致；md 里是灰色小字，HTML 里渲染成 figcaption
   - 要点             无序列表；「注意事项」标题下的自动渲染成琥珀提示框
   | 表头 | ... |     表格
   ```                代码块
@@ -99,7 +100,13 @@ if(toc){document.querySelectorAll('h2[id]').forEach(h=>{
 """
 
 IMG_RE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$")
-CAP_RE = re.compile(r"^\s*>\s*图\s?\d+-\d+：\S.*$")   # 图片下方的图注行（引用块，md 里显示为灰色）
+# 图片下方的图注行：<small> 灰色小字，md 编辑器里的观感贴近 HTML 的 figcaption
+CAP_RE = re.compile(r"^\s*<small[^>]*>\s*图\s?\d+-\d+：.*?</small>\s*$")
+
+
+def cap_text(line: str) -> str:
+    """从图注行里取出纯文字。"""
+    return re.sub(r"<[^>]+>", "", line).strip()
 
 CN_NUM = "零一二三四五六七八九"
 
@@ -260,10 +267,11 @@ def check(md: str, base: Path) -> list:
                     nxt = lines_all[k].strip()
                     break
             if ch > 0:
-                cap = re.sub(r"^>\s*", "", nxt)
-                if not (nxt.startswith(">") and re.match(r"^图\s?\d+-\d+：", cap)):
+                cap = cap_text(nxt)
+                if not CAP_RE.match(nxt):
                     probs.append(f"行{ln}: 图片下面缺图注行；alt 只在 HTML 里显示，"
-                                 f"md 里看不到，图片下方要单独写一行「> {alt}」")
+                                 f"md 里看不到，图片下方要单独写一行"
+                                 f"「<small style=\"color:#8A8F98\">{alt}</small>」")
                 elif cap != alt:
                     probs.append(f"行{ln}: 图注行「{cap}」和 alt「{alt}」对不上，两处要一致")
             if ch == 0:
