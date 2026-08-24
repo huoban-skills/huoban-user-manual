@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""业务流程章开篇的业务流程图：flow.json → SVG。
+"""册头的全流程图（一册一张）：flow.json → SVG。
 
 改自 huoban-automation-blueprint 的 render_flow.py。那边步骤卡片副行标的是
 承载它的自动化；这里读者是业务操作者，副行标这一步落在哪张表（跟手册章节
@@ -9,7 +9,7 @@
 分组横向排（业务阶段/岗位环节），组内步骤纵向排。
 
 用法：
-    python3 scripts/flow.py flow.json images/3-0-收款流程.svg
+    python3 scripts/flow.py flow.json images/0-全流程总览.svg
 
 flow.json：
 {
