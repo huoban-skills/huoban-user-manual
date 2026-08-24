@@ -6,7 +6,8 @@
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
-入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用），
+入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用、
+册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -190,8 +191,9 @@ def check(md: str, base: Path) -> list:
     # 豁免：字段说明等纯参考小节，以及典型业务场景章（跨章串联，不强制配图）。
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
     # 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔
-    LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在")
+    LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：")
     in_scenario_ch = False   # 当前是否在「典型业务场景」章内
+    section_title = ""       # 当前 h3 小节标题，用于常见问题格式检查
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
     sec_imgs = 0
@@ -227,12 +229,19 @@ def check(md: str, base: Path) -> list:
                 bare = re.sub(r"^\d+\.\d+\s+", "", title)
                 if not bare.endswith(("？", "?")):
                     probs.append(f"行{ln}: 典型业务场景的小节「{title}」要用一线员工的真实问法命名（以问号结尾），不用归纳式标题")
+            if level == 3:
+                section_title = title
+            if level == 2:
+                section_title = ""
             if level == 3 and not in_scenario_ch and not any(k in title for k in NO_IMG_OK):
                 sec = (ln, title)
             if level == 1:
                 h1_count += 1
                 if h1_count > 1:
                     probs.append(f"行{ln}: 出现第二个一级标题「{title}」，一册只允许一个")
+                if re.search(r"使用手册|配置手册|[｜|]|v?\d+\.\d+", title):
+                    probs.append(f"行{ln}: 册名「{title}」不合规：标题只写模块名，"
+                                 f"不追加\"使用手册\"、版本号或分隔符")
             elif level == 2:
                 mm = re.match(r"^([一二三四五六七八九十]+)、(\S.*)$", title)
                 if not mm:
@@ -281,6 +290,9 @@ def check(md: str, base: Path) -> list:
                 elif not (base / src).exists():
                     probs.append(f"行{ln}: 图片文件不存在：{src}")
                 continue
+            if re.search(r"总览|全流程", src) and src.lower().endswith(".svg"):
+                probs.append(f"行{ln}: 总览流程图「{src}」出现在第 {ch} 章里；"
+                             f"它该放在册头模块介绍后面（第一章之前），图注不编图号")
             mm = re.match(r"^图 (\d+)-(\d+)：(\S.*)$", alt)
             if not mm:
                 probs.append(f"行{ln}: 图注「{alt}」应为「图 {ch}-{fig + 1}：说明」格式（半角空格、全角冒号、说明非空）")
@@ -301,6 +313,9 @@ def check(md: str, base: Path) -> list:
                     probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
                                  f"重新框选让它整个落在画面内")
             continue
+
+        if "常见问题" in section_title and re.match(r"^\*?\*?[QA][：:]", line.strip()):
+            probs.append(f"行{ln}: 常见问题不用 Q/A 前缀，问题写成加粗编号行「**1. 问题？**」，答案直接跟在下面")
 
         for w in LEAKS:
             if w in line:
@@ -586,6 +601,8 @@ def main():
     dst.write_text(render(md, src.parent), encoding="utf-8")
     print(f"已渲染：{dst}")
     probs = check(md, src.parent)
+    if not (src.parent / "outline.md").exists():
+        probs.append("产出目录缺 outline.md：骨架（表、页面、章节、数据口径）没有留痕，阶段一可能被跳过")
     if probs:
         print(f"× 格式机检 {len(probs)} 处问题：")
         for p in probs:
