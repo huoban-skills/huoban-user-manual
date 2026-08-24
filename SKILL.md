@@ -53,7 +53,7 @@ metadata:
    **使用手册**（形态唯一：成册，单场景就是只有一章的册子）：
 
    - 判定模块类型（基础资料 / 业务流程），标出主单据、明细表、资料表，划业务闭环，给一版章节清单。
-   - 册末固定含「典型业务场景」章；业务流程章开篇固定配业务流程图（`scripts/flow.py`）。
+   - 册末固定含「典型业务场景」章；业务流程模块册头固定配一张全流程图（`scripts/flow.py`）。
 
    **配置手册**（结构见 config-writing-guide）：
 
@@ -90,7 +90,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 
 ### 阶段三：逐章循环（深查 → 走查 → 写作）
 
-按阶段一确认的骨架推进，每章一个闭环：
+业务流程模块动笔前先出册头总览流程图（仅使用手册）：从骨架写 flow.json，`python3 scripts/flow.py flow.json images/0-全流程总览.svg`，放模块介绍后面。然后按阶段一确认的骨架推进，每章一个闭环：
 
 1. **读本章摘要包**（digest.py 输出；无可采集工作区的单元跳过）。
 2. **按需深查**，只查本章要写的内容：
@@ -101,9 +101,8 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
    - 字段类型名以 `hac table field-config list-types` 为准，不凭印象写。
    - **配置手册专用**：写"改动会影响什么"时查引用关系：字段被哪些自动化、公式、关联引用（子命令用 `hac table --help` 现查，不凭印象）；权限角色、页面配置 hac 覆盖不到的部分以界面实测为准。
 3. **浏览器走查 + 截图**，全按 [references/walkthrough-guide.md](references/walkthrough-guide.md) 执行：先从摘要包推导本章的截图点位清单（配置手册的点位是配置入口和编辑界面，密度低于使用手册），再按「看 → 动 → 看 → 截」循环走查。截图存 `<产出目录>/images/`，界面观察记 `notes.md`，落的演示数据登记 `demo-data.md`。
-4. **业务流程章先出流程图**（仅使用手册）：从摘要包和实测流程写 flow.json，`python3 scripts/flow.py flow.json images/<章号>-0-<流程名>.svg`，放章开篇。
-5. **写本章 Markdown**：使用手册按 writing-guide，配置手册按 config-writing-guide，含配图规范。图放进它对应的步骤条目里（列表项下缩进 4 空格），用相对路径引用。**本章写完的标准**：每个操作序列配齐入口图、过程图、结果图（能合并的合并），每张图挂在它对应的步骤下、框对准该步骤的控件，步骤点名的按钮和字段都能在图里找到；对照 notes.md 登记的截图逐步骤核对，缺图现在回走查补截，不欠到自检。
-6. **渲染 HTML 预览**：`python3 scripts/render.py <文档.md>`，同目录出同名 .html。md 是源文件，人工修改改 md，改完重跑一次；html 只当预览不手改。
+4. **写本章 Markdown**：使用手册按 writing-guide，配置手册按 config-writing-guide，含配图规范。图放进它对应的步骤条目里（列表项下缩进 4 空格），用相对路径引用。**本章写完的标准**：每个操作序列配齐入口图、过程图、结果图（能合并的合并），每张图挂在它对应的步骤下、框对准该步骤的控件，步骤点名的按钮和字段都能在图里找到；对照 notes.md 登记的截图逐步骤核对，缺图现在回走查补截，不欠到自检。
+5. **渲染 HTML 预览**：`python3 scripts/render.py <文档.md>`，同目录出同名 .html。md 是源文件，人工修改改 md，改完重跑一次；html 只当预览不手改。
 
 一章写完再进下一章；上一章的深查 JSON 和走查细节不带进下一章上下文。
 
@@ -118,7 +117,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 各脚本的参数细节和示例以**脚本头注释**为准（`head <脚本>` 即可查），此处只记分工：
 
 - **digest.py**：读采集目录落盘文件，输出章节摘要包 Markdown。AI 只读它的输出，不读原始 JSON。用法：`python3 scripts/digest.py --dir <采集目录> --tables "表名A,表名B"`。
-- **flow.py**：业务流程章开篇流程图，flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。
+- **flow.py**：册头全流程图（一册一张），flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。
 - **render.py**：Markdown → HTML 预览（Linear 浅色皮肤，零依赖零 token）。md 写法约定见脚本头注释。
 - **annotate.py**：按百分比坐标给截图画标注框、模糊、遮挡、裁剪。browser.py 的 CSS 选择器在控制台类 SPA 匹配不上时用它；没先 `--grid` 量过就画会直接报错。多个 `--box` 自动按传入顺序标序号角标。
 - **browser.py**：浏览器走查驱动，每个子命令独立执行、窗口跨命令常驻。子命令清单（start / status / page / goto / snapshot / click / type / fill / press / scroll / wait / shot / eval / stop）和参数见脚本头注释；`shot` 的 `--highlight` 多框自动标序号，`--blur` / `--mask` 对应模糊与不可逆遮挡。
@@ -146,4 +145,4 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 ```
 
 - 使用手册标题只写模块名，不追加"使用手册"；配置手册标题写"<模块名>配置手册"。
-- 短流程用文本箭头 `→`，业务流程章开篇用 flow.py 出图。
+- 短流程用文本箭头 `→`，册头全流程图用 flow.py 出图。

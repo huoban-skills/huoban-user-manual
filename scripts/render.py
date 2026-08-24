@@ -227,6 +227,13 @@ def check(md: str, base: Path) -> list:
             sec_imgs += 1
             pend = None
             alt, src = im.group(1), im.group(2)
+            if ch == 0:
+                # 第一章之前只有册头总览流程图，图注不编图号，只查路径和文件
+                if src.startswith(("/", "http://", "https://")):
+                    probs.append(f"行{ln}: 图片「{src}」必须用相对路径（images/…）")
+                elif not (base / src).exists():
+                    probs.append(f"行{ln}: 图片文件不存在：{src}")
+                continue
             mm = re.match(r"^图 (\d+)-(\d+)：(\S.*)$", alt)
             if not mm:
                 probs.append(f"行{ln}: 图注「{alt}」应为「图 {ch}-{fig + 1}：说明」格式（半角空格、全角冒号、说明非空）")
