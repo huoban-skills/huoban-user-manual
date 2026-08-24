@@ -6,7 +6,7 @@
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、场景标题用问法、
-入口图必须有标注框、标注不出界、核对类步骤有图或图引用），
+入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -17,6 +17,7 @@ Markdown 约定（与 writing-guide 一致，只认这些）：
   **1. 问题？**      「常见问题」下的一条（加粗编号行），渲染成可折叠块；旧式 #### 问句兼容
   1. 步骤            有序列表；紧跟其后缩进 4 空格的图片/文字挂进这一条
       ![图 1-1：说明](images/1-1-x.png)
+      图 1-1：说明          图注行，与 alt 一致；md 里能看到，HTML 里渲染成 figcaption
   - 要点             无序列表；「注意事项」标题下的自动渲染成琥珀提示框
   | 表头 | ... |     表格
   ```                代码块
@@ -98,6 +99,7 @@ if(toc){document.querySelectorAll('h2[id]').forEach(h=>{
 """
 
 IMG_RE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$")
+CAP_RE = re.compile(r"^\s*图\s?\d+-\d+：\S.*$")   # 图片下方独立成行的图注
 
 CN_NUM = "零一二三四五六七八九"
 
@@ -169,6 +171,7 @@ def check(md: str, base: Path) -> list:
       步骤    1. 2. 3.           每个列表块内从 1 连续
     """
     probs: list = []
+    lines_all = md.splitlines()
     h1_count = 0
     ch = 0            # 当前章序号（int）
     minor = 0         # 当前章内小节号
@@ -251,6 +254,17 @@ def check(md: str, base: Path) -> list:
             sec_imgs += 1
             pend = None
             alt, src = im.group(1), im.group(2)
+            nxt = ""
+            for k in range(ln, min(ln + 3, len(lines_all))):
+                if lines_all[k].strip():
+                    nxt = lines_all[k].strip()
+                    break
+            if ch > 0:
+                if not re.match(r"^图\s?\d+-\d+：", nxt):
+                    probs.append(f"行{ln}: 图片下面缺图注行；alt 只在 HTML 里显示，"
+                                 f"md 里看不到，图片下方要单独写一行「{alt}」")
+                elif nxt != alt:
+                    probs.append(f"行{ln}: 图注行「{nxt}」和 alt「{alt}」对不上，两处要一致")
             if ch == 0:
                 # 第一章之前只有册头总览流程图，图注不编图号，只查路径和文件
                 if src.startswith(("/", "http://", "https://")):
@@ -476,6 +490,12 @@ def render(md: str, base: Path) -> str:
                         continue
                     im = IMG_RE.match(lines[i])
                     if im:
+                        # 图注行紧跟在图片下面（md 里也能看到），吸收成 figcaption 不重复
+                        j = i + 1
+                        while j < n and not lines[j].strip():
+                            j += 1
+                        if j < n and CAP_RE.match(lines[j].strip()):
+                            i = j
                         item.append(figure_html(im.group(1), im.group(2), base))
                     else:
                         item.append(f"<p>{inline(lines[i].strip())}</p>")
@@ -509,6 +529,10 @@ def render(md: str, base: Path) -> str:
         if im:
             out.append(figure_html(im.group(1), im.group(2), base))
             i += 1
+            while i < n and not lines[i].strip():
+                i += 1
+            if i < n and CAP_RE.match(lines[i].strip()):
+                i += 1          # 图注行已渲染进 figcaption
             continue
 
         # 引用
