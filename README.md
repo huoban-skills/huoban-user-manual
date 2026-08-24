@@ -67,7 +67,6 @@ git clone https://github.com/huoban-skills/huoban-user-manual.git ~/.claude/skil
 
 ```
 SKILL.md                        # 入口：原则 + 四阶段工作流
-CONTEXT.md                      # 术语表
 references/
 ├── writing-guide.md            # 使用手册写作规范
 ├── config-writing-guide.md     # 配置手册写作规范
