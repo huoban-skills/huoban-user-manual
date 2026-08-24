@@ -48,17 +48,17 @@ PALETTE = [
 
 AUTO_INK = "#8f959e"   # 系统自动环节用灰，跟人工环节的彩色一眼区分
 
-PAD = 24
-GROUP_PAD_X = 20
-HEADER_H = 34
-STEP_W_MIN = 250
-STEP_W_MAX = 380
-STEP_H = 56
-STEP_GAP = 26
-GROUP_GAP = 32
-GROUP_BOTTOM = 18
-FS_STEP = 15
-FS_HEADER = 14
+PAD = 18
+GROUP_PAD_X = 16
+HEADER_H = 28
+STEP_W_MIN = 190
+STEP_W_MAX = 300
+STEP_H = 44
+STEP_GAP = 20
+GROUP_GAP = 26
+GROUP_BOTTOM = 14
+FS_STEP = 13
+FS_HEADER = 12
 FONT = '\'PingFang SC\', \'Helvetica Neue\', \'Microsoft YaHei\', Arial, sans-serif'
 
 
@@ -121,7 +121,7 @@ def render_svg(data: dict) -> str:
         text_width(_parts(s)[0], FS_STEP) > step_w - 24
         for g in groups for s in g.get("steps", [])
     )
-    step_h = STEP_H + (20 if two_line else 0)
+    step_h = STEP_H + (16 if two_line else 0)
     group_w = step_w + 2 * GROUP_PAD_X
 
     max_steps = max((len(g.get("steps", [])) for g in groups), default=0)
@@ -177,7 +177,7 @@ def render_svg(data: dict) -> str:
             f'fill="{c["tint"]}" stroke="{c["accent"]}" stroke-opacity="0.35" stroke-width="1"/>'
         )
         p.append(
-            f'<text x="{c["x"] + GROUP_PAD_X:.0f}" y="{PAD + 23}" font-size="{FS_HEADER}" '
+            f'<text x="{c["x"] + GROUP_PAD_X:.0f}" y="{PAD + 19}" font-size="{FS_HEADER}" '
             f'font-weight="700" fill="{c["accent"]}">{html.escape(c["name"])}</text>'
         )
 
@@ -205,12 +205,12 @@ def render_svg(data: dict) -> str:
             lh = FS_STEP * 1.3
             for i, ln in enumerate(names):
                 p.append(
-                    f'<text x="{bx:.0f}" y="{b["y"] + 23 + i * lh:.1f}" font-size="{FS_STEP}" '
+                    f'<text x="{bx:.0f}" y="{b["y"] + 18 + i * lh:.1f}" font-size="{FS_STEP}" '
                     f'fill="#1f2329" text-anchor="middle">{html.escape(ln)}</text>'
                 )
-            sub = wrap(b["sub"], step_w - 20, 12, max_lines=1)[0]
+            sub = wrap(b["sub"], step_w - 20, 11, max_lines=1)[0]
             p.append(
-                f'<text x="{bx:.0f}" y="{b["y"] + step_h - 14:.0f}" font-size="12" '
+                f'<text x="{bx:.0f}" y="{b["y"] + step_h - 10:.0f}" font-size="11" '
                 f'fill="{b["accent"]}" text-anchor="middle">{html.escape(sub)}</text>'
             )
         else:

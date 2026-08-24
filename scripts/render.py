@@ -14,7 +14,7 @@ Markdown 约定（与 writing-guide 一致，只认这些）：
   # 标题            册头/篇名；紧随其后的第一段渲染为导语，自动插目录
   ## 一、章节名      二级章节，自动进目录
   ### 1.1 小节名     三级小节，编号渲染为主题色
-  #### 问题？        「常见问题」下的一条，渲染成可折叠块
+  **1. 问题？**      「常见问题」下的一条（加粗编号行），渲染成可折叠块；旧式 #### 问句兼容
   1. 步骤            有序列表；紧跟其后缩进 4 空格的图片/文字挂进这一条
       ![图 1-1：说明](images/1-1-x.png)
   - 要点             无序列表；「注意事项」标题下的自动渲染成琥珀提示框
@@ -73,7 +73,7 @@ td:first-child{font-weight:650;color:var(--ink-2);white-space:nowrap}
 .notice ul{margin:0;padding-left:18px}
 .notice li{margin:4px 0}
 details.faq{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 20px;margin:10px 0}
-details.faq summary{font-weight:650;cursor:pointer;color:var(--ink)}
+details.faq summary{font-weight:650;font-size:14px;cursor:pointer;color:var(--ink)}
 details.faq summary::marker{color:var(--brand)}
 details.faq[open] summary{margin-bottom:8px}
 blockquote{margin:12px 0;padding:10px 16px;color:var(--ink-2);border-left:2px solid var(--brand-line);
@@ -459,6 +459,15 @@ def render(md: str, base: Path) -> str:
                 i += 1
             ul = "<ul>" + "".join(items) + "</ul>"
             out.append(f'<div class="notice">{ul}</div>' if "注意事项" in section else ul)
+            continue
+
+        # 常见问题里的加粗编号问句：**1. 问题？** 渲染成折叠块
+        fm = re.match(r"^\*\*(\d+)[.、]\s*(.+?)\*\*$", line.strip())
+        if fm and "常见问题" in section:
+            close_faq()
+            out.append(f'<details class="faq"><summary>{inline(fm.group(1) + ". " + fm.group(2))}</summary>')
+            faq_open = True
+            i += 1
             continue
 
         # 独立成行的图片
