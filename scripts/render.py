@@ -147,12 +147,19 @@ def has_box(path: Path):
     except Exception:
         return None
     try:
-        # 全尺寸取色：细描边只有 2~3px，缩略图的抗锯齿会把标注色糊没，检不出来
+        # 全尺寸找色：细描边只有 2~3px，缩略图的抗锯齿会把标注色糊没。
+        # 用查表掩膜（C 层逐像素）代替 getcolors，大图也是毫秒级。
+        from PIL import ImageChops
         im = Image.open(path).convert("RGB")
-        for _, (r, g, b) in im.getcolors(maxcolors=1 << 24) or []:
-            for ar, ag, ab in ACCENTS:
-                if abs(r - ar) <= 28 and abs(g - ag) <= 30 and abs(b - ab) <= 30:
-                    return True
+        bands = im.split()
+        for accent in ACCENTS:
+            m = None
+            for band, target, tol in zip(bands, accent, (28, 30, 30)):
+                lut = [255 if abs(v - target) <= tol else 0 for v in range(256)]
+                bm = band.point(lut)
+                m = bm if m is None else ImageChops.darker(m, bm)
+            if m.getbbox():
+                return True
         return False
     except Exception:
         return None
@@ -336,6 +343,11 @@ def check(md: str, base: Path) -> list:
         for w in ECHO:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：这是写作规范例句的措辞，例句只示意结构，换自己的说法")
+
+        lb = re.match(r"^\s*\*{0,2}(进入路径|进入方式|入口|访问路径)\*{0,2}[:：]", line)
+        if lb:
+            probs.append(f"行{ln}: 「{lb.group(1)}：」标签行是说明书腔，且和第一个步骤重复；"
+                         f"菜单路径只写在它对应的步骤里")
 
         # 模板复读：同一子句（去掉界面名和行内代码后）在全册出现 3 次以上
         s = line.strip()
