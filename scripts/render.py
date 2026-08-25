@@ -115,6 +115,14 @@ CN_NUM = "零一二三四五六七八九"
 # 标注框的颜色（当前珊瑚色 + 旧版红），用于机检"图注说要点这里，图上却没画框"
 ACCENTS = ((217, 119, 87), (225, 37, 27), (245, 34, 45))
 
+# 标注框那两项要读像素，缺 Pillow 就跑不了。跑不了必须说出来：
+# 静默跳过会让"机检通过"变成假话，而机检是这套规范唯一的硬约束。
+try:
+    from PIL import Image as _probe_pil  # noqa: F401
+    PIL_OK = True
+except Exception:
+    PIL_OK = False
+
 
 def box_clipped(path: Path):
     """标注框或序号角标是否画出了图外（图片最外圈出现标注色即判定截断）。"""
@@ -187,6 +195,7 @@ def check(md: str, base: Path) -> list:
       步骤    1. 2. 3.           每个列表块内从 1 连续
     """
     probs: list = []
+    pil_skipped = 0   # 因缺 Pillow 没查成标注框的图片数
     lines_all = md.splitlines()
     h1_count = 0
     ch = 0            # 当前章序号（int）
@@ -312,11 +321,14 @@ def check(md: str, base: Path) -> list:
             elif not (base / src).exists():
                 probs.append(f"行{ln}: 图片文件不存在：{src}")
             elif src.lower().endswith(".png"):
-                if re.search(r"入口|按钮|点[「击开]", alt) and has_box(base / src) is False:
-                    probs.append(f"行{ln}: 图注「{alt}」说的是入口/点击，但图上没有画标注框")
-                if box_clipped(base / src):
-                    probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
-                                 f"重新框选让它整个落在画面内")
+                if not PIL_OK:
+                    pil_skipped += 1
+                else:
+                    if re.search(r"入口|按钮|点[「击开]", alt) and has_box(base / src) is False:
+                        probs.append(f"行{ln}: 图注「{alt}」说的是入口/点击，但图上没有画标注框")
+                    if box_clipped(base / src):
+                        probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
+                                     f"重新框选让它整个落在画面内")
             continue
 
         if line.lstrip().startswith("|"):
@@ -384,6 +396,9 @@ def check(md: str, base: Path) -> list:
         if len(lns) >= 3:
             probs.append(f"行{'、'.join(map(str, lns))}: 「{cl}」出现 {len(lns)} 次，"
                          f"同一措辞跨章盖章是模板复读，同类信息换说法（见 user-manual-humanize.md）")
+    if pil_skipped:
+        probs.append(f"环境缺 Pillow：{pil_skipped} 张图的标注框检查没跑（画没画框、框有没有出界这两项）。"
+                     f"这一轮的结果不含这两项，装上再跑一次：pip install pillow")
     return probs
 
 

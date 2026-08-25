@@ -7,6 +7,7 @@ description: >
 metadata:
   requires:
     bins: ["hac", "python3"]
+    pips: ["pillow", "playwright"]   # pillow 缺了标注框机检会整项跑不了；playwright 缺了走查开不了浏览器
 ---
 
 # 伙伴云图文手册生成 Skill

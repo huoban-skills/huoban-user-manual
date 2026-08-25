@@ -33,7 +33,7 @@ git clone https://github.com/huoban-skills/huoban-user-manual.git ~/.claude/skil
 
 - hac（伙伴云官方 CLI，已配置认证）
 - python3 + Playwright（chromium）：`pip install playwright && playwright install chromium`
-- Pillow（截图标注用）：`pip install pillow`
+- Pillow（截图标注 + 标注框机检都要用，缺了机检会少查两项并报错）：`pip install pillow`
 
 ## 使用
 
