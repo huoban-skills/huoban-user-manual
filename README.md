@@ -70,6 +70,7 @@ SKILL.md                        # 入口：原则 + 四阶段工作流
 references/
 ├── writing-guide.md            # 使用手册写作规范
 ├── config-writing-guide.md     # 配置手册写作规范
+├── user-manual-humanize.md     # 手册去 AI 味（表述层的唯一事实源）
 ├── walkthrough-guide.md        # 浏览器走查规范（标注与脱敏的唯一事实源）
 └── self-check.md               # 交付前自检清单
 scripts/

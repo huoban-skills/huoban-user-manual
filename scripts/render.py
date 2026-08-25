@@ -192,6 +192,11 @@ def check(md: str, base: Path) -> list:
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
     # 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔
     LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：")
+    # 陈词与例句照抄（user-manual-humanize.md）：AI 腔陈词，以及写作规范例句的特征片段
+    STOCK = ("旨在", "致力于", "助力", "赋能", "极大提升", "高效便捷", "一目了然",
+             "轻松实现", "值得注意的是", "总而言之", "综上所述", "众所周知")
+    ECHO = ("按下面步骤", "取数的档案")
+    dup_clauses: dict = {}   # 归一化子句 -> [行号]，抓跨章模板复读
     section_title = ""       # 当前 h3 小节标题，用于常见问题格式检查
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
@@ -325,6 +330,23 @@ def check(md: str, base: Path) -> list:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：内部行话和元信息不进手册（环境缺陷、走查情况记 notes.md）")
 
+        for w in STOCK:
+            if w in line:
+                probs.append(f"行{ln}: 正文出现陈词「{w}」：价值用具体业务结果说，见 user-manual-humanize.md")
+        for w in ECHO:
+            if w in line:
+                probs.append(f"行{ln}: 正文出现「{w}」：这是写作规范例句的措辞，例句只示意结构，换自己的说法")
+
+        # 模板复读：同一子句（去掉界面名和行内代码后）在全册出现 3 次以上
+        s = line.strip()
+        if s and not s.startswith(("|", ">", "<small")):
+            text = re.sub(r"`[^`]*`", "", s).replace("**", "")
+            text = re.sub(r"^(\d+\.|-)\s+", "", text)
+            for cl in re.split(r"[。；！？，：]", text):
+                cl = cl.strip()
+                if len(cl) >= 6 and "「" not in cl:
+                    dup_clauses.setdefault(cl, []).append(ln)
+
         if pend and re.search(r"[如同见]图\s?\d+-\d+", line):
             pend = None
 
@@ -346,6 +368,10 @@ def check(md: str, base: Path) -> list:
             step_expect = 0
 
     flush_section()
+    for cl, lns in dup_clauses.items():
+        if len(lns) >= 3:
+            probs.append(f"行{'、'.join(map(str, lns))}: 「{cl}」出现 {len(lns)} 次，"
+                         f"同一措辞跨章盖章是模板复读，同类信息换说法（见 user-manual-humanize.md）")
     return probs
 
 
