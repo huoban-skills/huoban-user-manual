@@ -76,7 +76,7 @@ td:first-child{font-weight:650;color:var(--ink-2);white-space:nowrap}
 .notice ul{margin:0;padding-left:18px}
 .notice li{margin:4px 0}
 details.faq{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 20px;margin:10px 0}
-details.faq summary{font-weight:650;font-size:14px;cursor:pointer;color:var(--ink)}
+details.faq summary{font-weight:650;font-size:13.5px;cursor:pointer;color:var(--ink)}
 details.faq summary::marker{color:var(--brand)}
 details.faq[open] summary{margin-bottom:8px}
 blockquote{margin:12px 0;padding:10px 16px;color:var(--ink-2);border-left:2px solid var(--brand-line);
