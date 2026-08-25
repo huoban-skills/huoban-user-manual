@@ -147,9 +147,9 @@ def has_box(path: Path):
     except Exception:
         return None
     try:
+        # 全尺寸取色：细描边只有 2~3px，缩略图的抗锯齿会把标注色糊没，检不出来
         im = Image.open(path).convert("RGB")
-        im.thumbnail((500, 500))
-        for _, (r, g, b) in im.getcolors(maxcolors=500 * 500) or []:
+        for _, (r, g, b) in im.getcolors(maxcolors=1 << 24) or []:
             for ar, ag, ab in ACCENTS:
                 if abs(r - ar) <= 28 and abs(g - ag) <= 30 and abs(b - ab) <= 30:
                     return True
