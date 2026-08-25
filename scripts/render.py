@@ -7,7 +7,8 @@
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、
 入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用、
-册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头），
+册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头、
+正文不用 HTML 标签），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -314,6 +315,11 @@ def check(md: str, base: Path) -> list:
 
         if "常见问题" in section_title and re.match(r"^\*?\*?[QA][：:]", line.strip()):
             probs.append(f"行{ln}: 常见问题不用 Q/A 前缀，问题写成加粗编号行「**1. 问题？**」，答案直接跟在下面")
+
+        htag = re.match(r"^\s*</?(h[1-6]|ol|ul|li|p|div|br)\b", line)
+        if htag:
+            probs.append(f"行{ln}: 正文出现 HTML 标签 <{htag.group(1)}>；"
+                         f"标题用 ## / ###、步骤用 1. 2. 3.、要点用 -，只有图注行用 <small>")
 
         for w in LEAKS:
             if w in line:
