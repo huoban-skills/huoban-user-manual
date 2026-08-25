@@ -13,6 +13,7 @@ browser.py 的 --mask / --highlight 靠 CSS selector，控制台类 SPA（阿里
       --box 14,36,73,44 --blur 10,20,45,28 --fill 85,0,100,7
 
 `--box` 传入多个时按传入顺序在框左上角自动画 ①②③ 序号角标（单框不画）。
+画框时自动向外让开，避免框线压住按钮文字和组件边界；边线仍落在深色内容上会继续外扩。
 何时画框、选区怎么取、脱敏怎么复检，标准都在 references/walkthrough-guide.md
 第四、五节，本脚本只管执行。`--blur-radius` 只调模糊强度，不弥补选区错位。
 
@@ -25,8 +26,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-ACCENT = "#D97757"   # 标注框珊瑚色：白边圆角描边，在蓝色系界面上醒目不刺眼
-SHADOW = (31, 35, 41, 110)
+ACCENT = "#D97757"   # 标注框珊瑚色：细圆角描边，在蓝色系界面上醒目不刺眼
 MASK = "#DDDDDD"
 
 
@@ -96,32 +96,47 @@ def annotate(path, boxes, fills, blurs, crop, blur_radius=None):
         d.rectangle(_rect(f, w, h), fill=MASK)
 
     if boxes:
-        # 柔和描边样式：投影 → 白色外圈 → 珊瑚色圆角框 → 序号角标
-        lw = max(3, w // 400)
-        corner = max(8, w // 120)
+        # 细描边样式：珊瑚色圆角框（无投影、无白边）+ 序号角标；框线画在目标外侧，不压内容
+        lw = max(2, w // 700)
+        pad = lw + 2          # 框线与目标之间留空，避免压住按钮文字和组件边界
+        corner = max(6, w // 150)
         base = im.convert("RGBA")
-        shadow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow)
-        for b in boxes:
-            r = _rect(b, w, h)
-            sd.rounded_rectangle([r[0] + 2, r[1] + 3, r[2] + 2, r[3] + 3],
-                                 radius=corner, outline=SHADOW, width=lw + 2)
-        base = Image.alpha_composite(base, shadow.filter(ImageFilter.GaussianBlur(3)))
         d = ImageDraw.Draw(base)
         br = max(12, w // 110)
+        px = base.load()
+
+        def edge_busy(rect):
+            """框线要走的这一圈上有多少深色像素（压住按钮或文字的迹象）。"""
+            x0, y0, x1, y1 = (int(v) for v in rect)
+            pts = [(x, y0) for x in range(x0, x1, 3)] + [(x, y1) for x in range(x0, x1, 3)] \
+                + [(x0, y) for y in range(y0, y1, 3)] + [(x1, y) for y in range(y0, y1, 3)]
+            pts = [(x, y) for x, y in pts if 0 <= x < w and 0 <= y < h]
+            if not pts:
+                return 0.0
+            dark = sum(1 for x, y in pts
+                       if (px[x, y][0] * 299 + px[x, y][1] * 587 + px[x, y][2] * 114) / 1000 < 150)
+            return dark / len(pts)
+
         for i, b in enumerate(boxes):
             r = _rect(b, w, h)
+            # 向外扩：框住目标而不是压在目标上；边线压着内容就在小范围内挑最干净的位置
+            best, best_busy = pad, 1.0
+            for grow in (pad, pad + 2, pad + 4, pad + 6):
+                busy = edge_busy([r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow])
+                if busy < 0.12:
+                    best = grow
+                    break
+                if busy < best_busy:
+                    best, best_busy = grow, busy
+            r = [r[0] - best, r[1] - best, r[2] + best, r[3] + best]
             # 内缩到画布内：框和角标画出图外会被截断，读者看到半个框、半个序号
-            m = lw + 2 + (br + 2 if len(boxes) > 1 else 0)
-            r = [min(max(r[0], m), w - lw - 2), min(max(r[1], m), h - lw - 2),
-                 min(max(r[2], m), w - lw - 2), min(max(r[3], m), h - lw - 2)]
-            d.rounded_rectangle([r[0] - lw, r[1] - lw, r[2] + lw, r[3] + lw],
-                                radius=corner + lw, outline="#ffffff", width=lw + 2)
+            m = lw + (br + 2 if len(boxes) > 1 else 0)
+            r = [min(max(r[0], m), w - lw - 1), min(max(r[1], m), h - lw - 1),
+                 min(max(r[2], m), w - lw - 1), min(max(r[3], m), h - lw - 1)]
             d.rounded_rectangle(r, radius=corner, outline=ACCENT, width=lw)
             if len(boxes) > 1:
                 # 多框按传入顺序标序号角标，贴框左上角；含义写在步骤文字里
                 cx, cy = r[0], r[1]
-                d.ellipse([cx - br - 2, cy - br - 2, cx + br + 2, cy + br + 2], fill="#ffffff")
                 d.ellipse([cx - br, cy - br, cx + br, cy + br], fill=ACCENT)
                 num = str(i + 1)
                 font = _font(int(br * 1.3))

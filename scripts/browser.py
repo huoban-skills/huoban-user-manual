@@ -408,16 +408,15 @@ HIGHLIGHT_ON = """
   rects.forEach((r, i) => {
     // 柔和描边样式：珊瑚色圆角框 + 白色外圈 + 轻投影
     const m = document.createElement('div');
-    m.style.cssText = `position:absolute;left:${r.left - 4}px;top:${r.top - 4}px;` +
-      `width:${r.width + 8}px;height:${r.height + 8}px;` +
-      'border:3px solid #D97757;border-radius:10px;box-sizing:border-box;' +
-      'box-shadow:0 0 0 3px #fff, 2px 3px 6px rgba(31,35,41,.4), inset 0 0 0 2px #fff';
+    m.style.cssText = `position:absolute;left:${r.left - 5}px;top:${r.top - 5}px;` +
+      `width:${r.width + 10}px;height:${r.height + 10}px;` +
+      'border:2px solid #D97757;border-radius:8px;box-sizing:border-box';
     box.appendChild(m);
     if (rects.length > 1) {
       const b = document.createElement('div');
       b.style.cssText = `position:absolute;left:${Math.max(2, r.left - 15)}px;top:${Math.max(2, r.top - 15)}px;` +
-        'width:22px;height:22px;border-radius:50%;background:#D97757;color:#fff;' +
-        'box-shadow:0 0 0 2px #fff;display:flex;align-items:center;justify-content:center;' +
+        'width:20px;height:20px;border-radius:50%;background:#D97757;color:#fff;' +
+        'display:flex;align-items:center;justify-content:center;' +
         'font:bold 13px -apple-system,sans-serif';
       b.textContent = String(i + 1);
       box.appendChild(b);
