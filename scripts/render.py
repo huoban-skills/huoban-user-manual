@@ -166,7 +166,13 @@ def has_box(path: Path):
                 lut = [255 if abs(v - target) <= tol else 0 for v in range(256)]
                 bm = band.point(lut)
                 m = bm if m is None else ImageChops.darker(m, bm)
-            if m.getbbox():
+            bb = m.getbbox()
+            if not bb:
+                continue
+            # 标注框是围住控件的矩形描边，尺寸和像素量都远大于界面自身的红色元素
+            # （导航栏消息红点、必填红星、橙色状态标签），按尺寸和像素量过滤掉它们
+            w2, h2 = bb[2] - bb[0], bb[3] - bb[1]
+            if w2 >= 60 and h2 >= 40 and m.histogram()[255] >= 200:
                 return True
         return False
     except Exception:
@@ -219,18 +225,27 @@ def check(md: str, base: Path) -> list:
     sec_imgs = 0
     sec_step_imgs = 0  # 出现在第一条步骤之后的图：节首概览图不算过程图
     sec_entry = None   # 首步是创建/添加类入口动作的行号：入口图和表单图要成对
+    sec_entry_ref = None  # 入口步骤里「见图 X-Y」指向的图号
+    sec_first_img = None  # 本节第一张图的图号
+    fig_map = {}       # 图号 -> (行号, 相对路径)
+    entry_needs = []   # [(行号, 小节名, 图号)] 入口图待验标注框
     pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现图或「如图」引用
     sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
     sec_figref = False  # 小节正文有「如图/见图/与图 X-Y」引用，视同有图
 
     def flush_section():
         nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry
+        nonlocal sec_entry_ref, sec_first_img
         if sec and sec_steps >= 2 and sec_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
                          f"操作序列要有入口图、过程图、结果图")
         elif sec and sec_steps >= 2 and sec_step_imgs == 0 and not sec_figref:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」的 {sec_steps} 个步骤之间没有一张过程图，"
                          f"节首的概览图不算；给关键交互补图，或在步骤文字里「如图 X-Y」引用前文的图")
+        if sec and sec_entry:
+            _num = sec_entry_ref or sec_first_img
+            if _num:
+                entry_needs.append((sec_entry, sec[1], _num))
         if sec and sec_entry and sec_imgs < 2 and not sec_figref:
             probs.append(f"行{sec_entry}: 小节「{sec[1]}」首步是新增入口动作，但节内只有 {sec_imgs} 张图："
                          f"入口图（列表页框出按钮）和表单图要成对；入口在前文图里的，步骤里「见图 X-Y」引用")
@@ -242,6 +257,7 @@ def check(md: str, base: Path) -> list:
                          f"没有配图也没有「如图 X-Y」引用；界面元素写进正文就要能在图里找到，"
                          f"补图或引用前文的图（描述性小节同样适用，节首已有图不豁免）")
         sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry = None, 0, 0, 0, None, None, False, None
+        sec_entry_ref, sec_first_img = None, None
 
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
@@ -257,6 +273,7 @@ def check(md: str, base: Path) -> list:
             level, title = len(m.group(1)), m.group(2).strip()
             if level in (2, 3):
                 flush_section()
+
             if level == 3:
                 section_title = title
             if level == 2:
@@ -300,6 +317,11 @@ def check(md: str, base: Path) -> list:
                 sec_step_imgs += 1
             pend = None
             sec_ui = None
+            _fn = re.search(r"图 (\d+-\d+)", im.group(1))
+            if _fn:
+                fig_map[_fn.group(1)] = (ln, im.group(2))
+                if sec_first_img is None:
+                    sec_first_img = _fn.group(1)
             alt, src = im.group(1), im.group(2)
             nxt = ""
             for k in range(ln, min(ln + 3, len(lines_all))):
@@ -410,6 +432,9 @@ def check(md: str, base: Path) -> list:
             stext = sm.group(2)
             if sec_steps == 1 and re.search(r"点[^。]*「[^」]*(创建|添加数据|新建)[^」]*」", stext):
                 sec_entry = ln
+                r = re.search(r"[见如同]图\s?(\d+-\d+)", stext)
+                if r:
+                    sec_entry_ref = r.group(1)
             if (stext.count("、") >= 1
                     and re.search(r"查看|核对|确认|检查", stext)
                     and "无误" not in stext
@@ -424,6 +449,15 @@ def check(md: str, base: Path) -> list:
             step_expect = 0
 
     flush_section()
+
+    for _ln, _title, _num in entry_needs:
+        _hit = fig_map.get(_num)
+        if not _hit:
+            continue
+        _src = _hit[1]
+        if PIL_OK and _src.lower().endswith(".png") and has_box(base / _src) is False:
+            probs.append(f"行{_ln}: 小节「{_title}」的入口图（图 {_num}）上没有标注框，"
+                         f"入口图要把读者该点的按钮框出来")
     for cl, lns in dup_clauses.items():
         if len(lns) >= 3:
             probs.append(f"行{'、'.join(map(str, lns))}: 「{cl}」出现 {len(lns)} 次，"
