@@ -227,6 +227,7 @@ def check(md: str, base: Path) -> list:
     sec_imgs = 0
     sec_step_imgs = 0  # 出现在第一条步骤之后的图：节首概览图不算过程图
     sec_entry = None   # 首步是创建/添加类入口动作的行号：入口图和表单图要成对
+    last_step = None   # (行号, 正文) 当前步骤块的最后一步，块结束时校验末步带不带结果
     sec_entry_ref = None  # 入口步骤里「见图 X-Y」指向的图号
     sec_first_img = None  # 本节第一张图的图号
     fig_map = {}       # 图号 -> (行号, 相对路径)
@@ -432,10 +433,23 @@ def check(md: str, base: Path) -> list:
         if pend and re.search(r"[如同见]图\s?\d+-\d+", line):
             pend = None
 
+        # 步骤块断开时校验末步：只写收尾动作、不交代系统反馈的要报
+        if last_step and not re.match(r"^\s*\d+\.\s", line) and line.strip() and not line.startswith(" "):
+            ln2, txt = last_step
+            # 剥掉收尾动作和标点后几乎不剩内容 = 只写了动作没交代结果
+            rest = re.sub(r"点?「?(保存|提交|确定|完成|确认)」?", "", txt)
+            rest = re.sub(r"[。，、；：\s]", "", rest)
+            if re.search(r"保存|提交|确定|完成|确认", txt) and len(rest) < 4:
+                probs.append(f"行{ln2}: 末步「{txt}」只有收尾动作没有结果，"
+                             f"读者不知道点完发生什么；把它并进上一步并补一句系统反馈"
+                             f"（见 writing-guide「步骤写法」）")
+            last_step = None
+
         sm = re.match(r"^(\d+)\.\s+(.*)$", line)
         if sm:
             sec_steps += 1
             stext = sm.group(2)
+            last_step = (ln, stext.strip())
             if sec_steps == 1 and re.search(r"点[^。]*「[^」]*(创建|添加数据|新建)[^」]*」", stext):
                 sec_entry = ln
                 r = re.search(r"[见如同]图\s?(\d+-\d+)", stext)
