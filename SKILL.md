@@ -105,7 +105,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
    - **配置手册专用**：写"改动会影响什么"时查引用关系：字段被哪些自动化、公式、关联引用（子命令用 `hac table --help` 现查，不凭印象）；权限角色、页面配置 hac 覆盖不到的部分以界面实测为准。
 3. **浏览器走查 + 截图**，全按 [references/walkthrough-guide.md](references/walkthrough-guide.md) 执行：先从摘要包推导本章的截图点位清单（配置手册的点位是配置入口和编辑界面，密度低于使用手册），再按「看 → 动 → 看 → 截」循环走查。截图存 `<产出目录>/images/`，界面观察记 `notes.md`，落的演示数据登记 `demo-data.md`。
 4. **写本章 Markdown**：使用手册按 writing-guide，配置手册按 config-writing-guide，含配图规范；表述口吻两轨都按 [references/user-manual-humanize.md](references/user-manual-humanize.md)。图放进它对应的步骤条目里（列表项下缩进 4 空格），用相对路径引用。**本章写完的标准**：每张图挂在它对应的步骤下、框对准该步骤的控件，步骤点名的按钮和字段都能在图里找到；对照 notes.md 登记的截图逐步骤核对，缺图现在回走查补截，不欠到自检。
-5. **渲染 HTML 预览**：`python3 scripts/render.py <文档.md>`，同目录出同名 .html。md 是源文件，人工修改改 md，改完重跑一次；html 只当预览不手改。
+5. **渲染 HTML 预览 + 界面名词核对**：`python3 scripts/render.py <文档.md> --vocab <采集目录>/vocab.json`，同目录出同名 .html。词表先跑一次 `python3 scripts/vocab.py --dir <采集目录>` 生成；`--vocab` 不传，正文里「」引的字段名是否生造就没人核对。md 是源文件，人工修改改 md，改完重跑一次；html 只当预览不手改。
 
 一章写完再进下一章；上一章的深查 JSON 和走查细节不带进下一章上下文。
 
@@ -119,6 +119,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 
 各脚本的参数细节和示例以**脚本头注释**为准（`head <脚本>` 即可查），此处只记分工：
 
+- **vocab.py**：从采集目录抽系统原词表（表名、字段名、选项值、快捷按钮名）成 vocab.json，供 render.py 核对界面名词有没有写成生造的说法。
 - **collect.py**：阶段二轻采集，产物即 digest.py 的输入。facts.json 不含记录数，条数走查时界面直读。
 - **digest.py**：读采集目录落盘文件，输出章节摘要包 Markdown。AI 只读它的输出，不读原始 JSON。`--outline` 必传：outline.md 缺失或没有用户确认标记就拒绝运行（阶段一门闩）。
 - **flow.py**：册头全流程图（一册一张），flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。

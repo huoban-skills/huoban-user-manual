@@ -31,6 +31,7 @@ Markdown 约定（与 writing-guide 一致，只认这些）：
 from __future__ import annotations
 
 import html as ihtml
+import json
 import re
 import sys
 from pathlib import Path
@@ -109,6 +110,27 @@ CAP_RE = re.compile(r"^\s*<small[^>]*>\s*图\s?\d+-\d+：.*?</small>\s*$")
 def cap_text(line: str) -> str:
     """从图注行里取出纯文字。"""
     return re.sub(r"<[^>]+>", "", line).strip()
+
+# 平台自带的界面词：不在表结构里，但确实是界面上的原名
+PLATFORM_UI = {
+    "创建", "保存", "取消", "添加数据", "编辑", "删除", "确定", "确认",
+    "保存并继续创建", "创建新数据", "+ 创建新数据", "创建视图", "字段设置",
+    "分组", "筛选", "排序", "冻结", "全部数据", "我创建的", "导入模版", "导入模板",
+    "导入 Excel", "智能识别", "仅更新数据", "数据唯一编号", "展开附加信息",
+}
+
+
+def load_vocab(path):
+    """读 vocab.py 产出的系统原词表，合并平台自带界面词。"""
+    try:
+        d = json.loads(Path(path).read_text())
+    except Exception:
+        return None
+    v = set(PLATFORM_UI)
+    for k in ("tables", "fields", "options"):
+        v |= {x.strip() for x in d.get(k, []) if isinstance(x, str)}
+    return v
+
 
 CN_NUM = "零一二三四五六七八九"
 
@@ -736,17 +758,65 @@ def render(md: str, base: Path) -> str:
 """
 
 
+
+def check_vocab(md: str, vocab_path) -> list:
+    """核对正文里当界面元素用的「X」是不是系统原词（vocab.py 产出的词表）。
+
+    只查语境明确的：填「X」/选「X」/点「X」/「X」必填/「X」会变空。
+    举例值、业务说法不在此列，不查。
+    """
+    if not vocab_path:
+        return ["界面名词校验没跑：未传 --vocab <vocab.json>，「」里的字段名是否生造无人核对"]
+    vocab = load_vocab(vocab_path)
+    if vocab is None:
+        return [f"界面名词校验没跑：读不到词表 {vocab_path}"]
+    probs, seen = [], set()
+    pats = [
+        r"[填选点勾]开?[击选]?「([^」]{1,20})」",
+        r"「([^」]{1,20})」(?=必填|是必填|会变空|自动生成|不用填)",
+    ]
+    in_code = False
+    for ln, line in enumerate(md.splitlines(), 1):
+        if line.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or line.lstrip().startswith("<small"):
+            continue
+        for pat in pats:
+            for m in re.finditer(pat, line):
+                w = m.group(1).strip()
+                if w in vocab or w in seen:
+                    continue
+                seen.add(w)
+                probs.append(f"行{ln}: 「{w}」不在系统原词表里 → 是举例值就放着，"
+                             f"是字段/按钮名就核对界面改成原名")
+    return probs
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     src = Path(sys.argv[1])
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else src.with_suffix(".html")
+    vocab_path = None
+    argv = sys.argv[1:]
+    if "--vocab" in argv:
+        i = argv.index("--vocab")
+        vocab_path = argv[i + 1] if i + 1 < len(argv) else None
+        argv = argv[:i] + argv[i + 2:]
+        src = Path(argv[0])
+        dst = Path(argv[1]) if len(argv) > 1 else src.with_suffix(".html")
     md = src.read_text(encoding="utf-8")
     dst.write_text(render(md, src.parent), encoding="utf-8")
     print(f"已渲染：{dst}")
     probs = check(md, src.parent)
+    vocab_notes = check_vocab(md, vocab_path)
     if not (src.parent / "outline.md").exists():
         probs.append("产出目录缺 outline.md：骨架（表、页面、章节、数据口径）没有留痕，阶段一可能被跳过")
+    if vocab_notes:
+        print(f"⚠ 界面名词待核 {len(vocab_notes)} 处（机器分不清字段名和举例值，逐条人工确认）：")
+        for n in vocab_notes:
+            print(f"  {n}")
     if probs:
         print(f"× 格式机检 {len(probs)} 处问题：")
         for p in probs:
