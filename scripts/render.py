@@ -342,7 +342,7 @@ def check(md: str, base: Path) -> list:
             if not sec_figref and re.search(r"如图|见图|[与同]图\s*\d+-\d+", line):
                 sec_figref = True
             if sec_ui is None:
-                ui = re.search(r"页签|按钮|点「[^」]+」", line)
+                ui = re.search(r"页签|按钮|下拉|点开?「[^」]+」", line)
                 if ui:
                     sec_ui = (ln, ui.group(0))
 
