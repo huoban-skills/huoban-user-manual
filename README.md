@@ -75,10 +75,14 @@ references/
 └── self-check.md               # 交付前自检清单
 scripts/
 ├── browser.py                  # 浏览器走查驱动（Playwright + CDP 常驻）
+├── collect.py                  # 阶段二轻采集：逐表落 facts / layout / automation
 ├── annotate.py                 # 截图标注：标框、序号、模糊、裁剪
 ├── digest.py                   # 采集数据 → 章节摘要包
 ├── flow.py                     # flow.json → 业务流程图 SVG
 └── render.py                   # md → HTML 预览 + 格式机检
+CHANGELOG/
+├── v1.0 ....md                 # 版本汇总（定稿形态与关键取舍）
+└── archive/                    # 逐日过程记录
 ```
 
-变更历史见 [CHANGELOG.md](CHANGELOG.md)。
+变更历史见 [CHANGELOG/](CHANGELOG/)：版本汇总在目录下，逐日过程记录在 `archive/`。当前版本 v1.0。
