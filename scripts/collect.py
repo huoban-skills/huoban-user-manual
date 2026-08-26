@@ -22,6 +22,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # 不可录入的系统字段类型：digest 里标「系统字段」
@@ -32,14 +33,22 @@ EXTRA_LABELS = {"sub_table": "子表", "separator": "分组标题", "separator2"
 
 
 def hac(*args: str) -> dict:
-    """跑一条 hac 命令，返回解析后的 JSON。禁止 2>&1：stdout 是数据，stderr 是 token 统计。"""
-    p = subprocess.run(["hac", *args], capture_output=True, text=True)
-    if p.returncode != 0 or not p.stdout.strip():
-        sys.exit(f"× hac {' '.join(args)} 失败：{p.stderr.strip()[:400]}")
+    """跑一条 hac 命令，返回解析后的 JSON。禁止 2>&1：stdout 是数据，stderr 是 token 统计。
+
+    输出写临时文件而不是管道：hac 写管道超过 64KB 会没 flush 完就退出，
+    字段多的表（如订单）拿到的 JSON 是截断的，解析必然失败。
+    """
+    with tempfile.TemporaryDirectory() as d:
+        out_path, err_path = Path(d) / "out.json", Path(d) / "err.txt"
+        with open(out_path, "w") as out, open(err_path, "w") as err:
+            code = subprocess.run(["hac", *args], stdout=out, stderr=err).returncode
+        stdout, stderr = out_path.read_text(), err_path.read_text()
+    if code != 0 or not stdout.strip():
+        sys.exit(f"× hac {' '.join(args)} 失败：{stderr.strip()[:400]}")
     try:
-        return json.loads(p.stdout)
+        return json.loads(stdout)
     except json.JSONDecodeError:
-        sys.exit(f"× hac {' '.join(args)} 输出不是 JSON：{p.stdout[:300]}")
+        sys.exit(f"× hac {' '.join(args)} 输出不是 JSON：{stdout[:300]}")
 
 
 def type_label_map() -> dict:
