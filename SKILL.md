@@ -3,7 +3,7 @@ name: huoban-user-manual
 description: >
   用浏览器实测伙伴云系统并截图，生成图文手册（Markdown + 图片目录），一次一本：
   使用手册（面向业务操作者）或配置手册（面向管理员，讲配置在哪、为什么、改了影响什么）。
-  用户要带截图的使用/操作手册、配置/搭建手册、实测手册或帮助文档时触发。
+  用户要带截图的使用/操作手册、配置/搭建手册或帮助文档时触发。
 metadata:
   requires:
     bins: ["hac", "python3"]
@@ -17,10 +17,8 @@ metadata:
 1. **一次任务只出一本**：使用手册或配置手册，二选一，不并出。检验句：使用手册回答"我该做什么、系统会给我什么"，配置手册回答"系统为什么会这样、在哪改、改了影响什么"。
 2. **双轨采集**：hac 管逻辑真相（字段配置、自动化逻辑、审批流），浏览器管界面真相（真实截图、交互细节、提示文案）。二者冲突时以界面实测为准，并在实测笔记里标记。外部平台和纯平台功能没有 hac 兜底，**事实来源**以用户提供加界面实测为准，拿不准标 `[待确认]`；这条只约束事实从哪来，不限制截图由谁截。
 3. **浏览器里能打开的都自己截，且一律走 `scripts/browser.py`**：不分伙伴云还是外部平台（阿里云、企业微信、飞书等控制台），走查和截图都由自己完成，不要让用户代截。唯一的例外是**输入账号密码**：登录动作在 browser.py 的窗口里交给用户，登完继续代劳。**不要去接管用户日常用的浏览器**：那类工具截的图落不到指定路径，也没有脱敏和标框能力，做不成手册产物。
-4. **标注与脱敏只有一份标准**：截图怎么画标注框、怎么脱敏，全按 [references/walkthrough-guide.md](references/walkthrough-guide.md) 第五节执行，其他文件不另立规则：业务数据零打码，只有 API key、密钥、账号密码类凭证要模糊。
-5. **按需采集，省 token**：能用一条命令批量落盘的不逐表查；只对写进文档的内容深查配置，不拿全量配置层。
-6. **分阶段交互**：范围和骨架让用户确认后再动手；生成后交用户审阅。
-7. **写作规范分轨**：使用手册按 [references/writing-guide.md](references/writing-guide.md)，配置手册按 [references/config-writing-guide.md](references/config-writing-guide.md)；走查规范两轨共用 walkthrough-guide。
+4. **标注与脱敏只有一份标准**：截图怎么画标注框、怎么脱敏，全按 [references/walkthrough-guide.md](references/walkthrough-guide.md) 第五节执行，其他文件不另立规则。
+5. **按需采集，省 token**：清单级信息走 collect.py 一次落盘；只对写进文档的内容深查配置，不拿全量配置层。
 
 ---
 
@@ -28,7 +26,7 @@ metadata:
 
 ### 阶段〇：环境准备
 
-1. 涉及伙伴云工作区时验证 hac 可用：`hac table list-tables --space-id <space_id>` 试跑，401/403 停止任务让用户检查认证。
+1. 涉及伙伴云工作区时验证 hac 可用：`hac table list-tables --space-id <space_id>` 试跑。
 
 2. 启动走查浏览器：
 
@@ -121,12 +119,12 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 
 各脚本的参数细节和示例以**脚本头注释**为准（`head <脚本>` 即可查），此处只记分工：
 
-- **collect.py**：阶段二轻采集。逐表跑 `get-table` / `form-layout get` / `automation list`，落盘 facts.json、layout-*.json、automation-*.json。facts.json 不含记录数，条数走查时界面直读。
+- **collect.py**：阶段二轻采集，产物即 digest.py 的输入。facts.json 不含记录数，条数走查时界面直读。
 - **digest.py**：读采集目录落盘文件，输出章节摘要包 Markdown。AI 只读它的输出，不读原始 JSON。`--outline` 必传：outline.md 缺失或没有用户确认标记就拒绝运行（阶段一门闩）。
 - **flow.py**：册头全流程图（一册一张），flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。
 - **render.py**：Markdown → HTML 预览（Linear 浅色皮肤，零依赖零 token）。md 写法约定见脚本头注释。
 - **annotate.py**：按百分比坐标给截图画标注框、模糊、裁剪。browser.py 的 CSS 选择器在控制台类 SPA 匹配不上时用它；没先 `--grid` 量过就画会直接报错。多个 `--box` 自动按传入顺序标序号角标。
-- **browser.py**：浏览器走查驱动，每个子命令独立执行、窗口跨命令常驻。子命令清单（start / status / page / goto / snapshot / click / type / fill / press / scroll / wait / shot / eval / stop）和参数见脚本头注释；`shot` 的 `--highlight` 多框自动标序号，`--blur` 做模糊脱敏。
+- **browser.py**：浏览器走查驱动，每个子命令独立执行、窗口跨命令常驻；子命令和参数见脚本头注释。`shot` 的 `--highlight` 多框自动标序号，`--blur` 做模糊脱敏。
 
 ## CLI 铁律
 
@@ -137,7 +135,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 
 ## 输出规范
 
-一个需求一个目录，一次只出一本手册：
+一个需求一个目录：
 
 ```
 <模块名或主题>/
