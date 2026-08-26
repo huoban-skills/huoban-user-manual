@@ -16,6 +16,9 @@
   python3 browser.py eval --js "document.title"
   python3 browser.py page --index N                         # 切换活动页面（多标签时）
   python3 browser.py stop
+
+多会话并行走查：设 HB_INSTANCE=<名字> 起独立浏览器（独立 profile + 独立端口），
+不设就用默认实例。共用一个实例时两边会互相把页面导航走，截出来的图对不上自己那一页。
 """
 
 from __future__ import annotations
@@ -29,8 +32,13 @@ import time
 import urllib.request
 from pathlib import Path
 
-PORT = 9333
-PROFILE = Path.home() / ".hb-manual-profile"
+# 两个会话同时走查会抢同一个浏览器：页面被对方导航走，snapshot 和 shot 各拿到一个页面，
+# 截出来的图不是自己那一页。要并行走查就各起各的实例：
+#   HB_INSTANCE=erp python3 browser.py start     # profile 走 ~/.hb-manual-profile-erp，端口 9333+哈希
+# 登录态跟着 profile 走，新实例要重新登录一次。
+INSTANCE = os.environ.get("HB_INSTANCE", "")
+PROFILE = Path.home() / (".hb-manual-profile" + (f"-{INSTANCE}" if INSTANCE else ""))
+PORT = int(os.environ.get("HB_PORT", 0)) or (9333 + (sum(map(ord, INSTANCE)) % 500 if INSTANCE else 0))
 STATE = PROFILE / "driver-state.json"
 # 窗口默认最大化，自适应当前屏幕（--start-maximized），截图尺寸即最大化后的窗口尺寸。
 # 屏幕本身偏小、内容仍被压到屏幕外时，用 HB_WIN=宽x高 强制放大渲染视口（窗口不变，

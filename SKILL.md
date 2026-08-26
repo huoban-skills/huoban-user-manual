@@ -68,18 +68,20 @@ metadata:
 只跑清单级命令，输出全部重定向到采集目录，AI 不读原始 JSON：
 
 ```bash
-hac table er-diagram-collect --space <space_id> --output <采集目录>/facts.json   # 全区表、字段、关系、记录数
-# 对范围内每张表（工作区级 automation 搜索会漏快捷按钮和旧版 workflow，必须按表逐个查）：
-hac automation list --table-id <tid> --space-id <space_id> > <采集目录>/automation-<tid>.json
-hac table form-layout get --table-id <tid> > <采集目录>/layout-<tid>.json
+# 范围内的表一条命令采齐：逐表落 facts.json（字段投影）、layout-<tid>.json、automation-<tid>.json
+# 工作区级 automation 搜索会漏快捷按钮和旧版 workflow，collect.py 按表逐个查，不要绕开它自己拼
+python3 scripts/collect.py --space-id <space_id> --dir <采集目录> --tables "表A,表B,表C"
+
+# 讲审批才补这条（collect.py 不管流程）：
 hac procedures list-procedures --space-id <space_id> > <采集目录>/procedures.json
+
 # 落盘后核一眼，0 字节的是采失败了（hac 把错误写 stderr，重定向只留空文件）
 wc -c <采集目录>/*.json
 ```
 
 **采多少由骨架决定，不一律跑全套**：
 
-- 使用手册：只核对演示环境的跑 `er-diagram-collect` 加涉及表的 `automation list`；要细讲表单填写才补 `form-layout`，讲审批才补 `procedures`。
+- 使用手册：`collect.py` 只传骨架里纳入的表；讲审批才补 `procedures`。
 - 配置手册：骨架里有哪层就采哪层，范围内的表通常全跑（配置手册的主体就是配置本身）。
 - 内容不落在任何工作区的，记一句"无可采集的工作区"，直接进阶段三。
 
@@ -119,6 +121,7 @@ python3 scripts/digest.py --dir <采集目录> --tables "本章的表,逗号分�
 
 各脚本的参数细节和示例以**脚本头注释**为准（`head <脚本>` 即可查），此处只记分工：
 
+- **collect.py**：阶段二轻采集。逐表跑 `get-table` / `form-layout get` / `automation list`，落盘 facts.json、layout-*.json、automation-*.json。facts.json 不含记录数，条数走查时界面直读。
 - **digest.py**：读采集目录落盘文件，输出章节摘要包 Markdown。AI 只读它的输出，不读原始 JSON。`--outline` 必传：outline.md 缺失或没有用户确认标记就拒绝运行（阶段一门闩）。
 - **flow.py**：册头全流程图（一册一张），flow.json → SVG。分组横排、步骤竖排，副行标表名，系统自动环节置灰虚线。
 - **render.py**：Markdown → HTML 预览（Linear 浅色皮肤，零依赖零 token）。md 写法约定见脚本头注释。

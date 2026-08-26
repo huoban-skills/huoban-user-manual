@@ -2,9 +2,9 @@
 """从落盘的采集文件生成章节摘要包（紧凑 Markdown），AI 只读本脚本输出，不读原始 JSON。
 
 前置落盘（采集目录下）：
-  facts.json                 hac table er-diagram-collect --space <sid> --output facts.json
-  automation-<table_id>.json hac automation list --table-id <tid>
-  layout-<table_id>.json     hac table form-layout get --table-id <tid>   （可选，缺了按 facts 顺序）
+  facts.json / layout-<table_id>.json / automation-<table_id>.json
+  三样都由 collect.py 一次落齐：
+      python3 collect.py --space-id <sid> --dir <采集目录> --tables "表A,表B"
 
 用法：
   python3 digest.py --dir <采集目录> --tables "表名A,表名B" --outline <产出目录>/outline.md
@@ -153,7 +153,7 @@ def main():
     base = Path(args.dir)
     facts = load(base / "facts.json")
     if not facts:
-        sys.exit(f"缺 {base}/facts.json，先跑 er-diagram-collect")
+        sys.exit(f"缺 {base}/facts.json，先跑 collect.py")
 
     all_tables = facts.get("tables", [])
     table_names = {str(t["table_id"]): t["name"] for t in all_tables}

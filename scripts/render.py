@@ -218,16 +218,22 @@ def check(md: str, base: Path) -> list:
     sec_steps = 0
     sec_imgs = 0
     pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现图或「如图」引用
+    sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
+    sec_figref = False  # 小节正文有「如图/见图/与图 X-Y」引用，视同有图
 
     def flush_section():
-        nonlocal sec, sec_steps, sec_imgs, pend
+        nonlocal sec, sec_steps, sec_imgs, pend, sec_ui, sec_figref
         if sec and sec_steps >= 2 and sec_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
                          f"操作序列至少要有入口图、过程图、结果图（能合并的合并）")
         if pend:
             probs.append(f"行{pend}: 核对类步骤点名了多个字段，但小节内此后没有配图，"
                          f"文字里也没有「如图 X-Y」引用；补图或指给读者看")
-        sec, sec_steps, sec_imgs, pend = None, 0, 0, None
+        if sec and sec_imgs == 0 and sec_ui and not sec_figref:
+            probs.append(f"行{sec_ui[0]}: 小节「{sec[1]}」提到「{sec_ui[1]}」但整节没有配图，"
+                         f"文字里也没有「如图 X-Y」引用；界面元素写进正文就要能在图里找到，"
+                         f"补图或引用前文的图（描述性小节同样适用）")
+        sec, sec_steps, sec_imgs, pend, sec_ui, sec_figref = None, 0, 0, None, None, False
 
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
@@ -330,6 +336,15 @@ def check(md: str, base: Path) -> list:
                         probs.append(f"行{ln}: 图「{src}」的标注框或序号角标画到了图外被截断，"
                                      f"重新框选让它整个落在画面内")
             continue
+
+        # 界面元素落图检查的素材采集：图注行（<small）不算正文提及
+        if sec and not line.lstrip().startswith("<small"):
+            if not sec_figref and re.search(r"如图|见图|[与同]图\s*\d+-\d+", line):
+                sec_figref = True
+            if sec_ui is None:
+                ui = re.search(r"页签|按钮|点「[^」]+」", line)
+                if ui:
+                    sec_ui = (ln, ui.group(0))
 
         if line.lstrip().startswith("|"):
             cells = [c.strip().strip("*") for c in line.strip().strip("|").split("|")]
