@@ -66,7 +66,7 @@ git clone https://github.com/huoban-skills/huoban-user-manual.git ~/.claude/skil
 ## 仓库结构
 
 ```
-SKILL.md                        # 入口：原则 + 四阶段工作流
+SKILL.md                        # 入口：目标/输入/输出/边界 + 依赖关系 + 五阶段流程
 references/
 ├── writing-guide.md            # 使用手册写作规范
 ├── config-writing-guide.md     # 配置手册写作规范
@@ -76,6 +76,7 @@ references/
 scripts/
 ├── browser.py                  # 浏览器走查驱动（Playwright + CDP 常驻）
 ├── collect.py                  # 阶段二轻采集：逐表落 facts / layout / automation
+├── vocab.py                    # 系统原词表：供机检核对界面名词有没有生造
 ├── annotate.py                 # 截图标注：标框、序号、模糊、裁剪
 ├── digest.py                   # 采集数据 → 章节摘要包
 ├── flow.py                     # flow.json → 业务流程图 SVG
@@ -85,4 +86,4 @@ CHANGELOG/
 └── archive/                    # 逐日过程记录
 ```
 
-变更历史见 [CHANGELOG/](CHANGELOG/)：版本汇总在目录下，逐日过程记录在 `archive/`。当前版本 v1.0。
+变更历史见 [CHANGELOG/](CHANGELOG/)：版本汇总在目录下，逐日过程记录在 `archive/`。当前版本 v1.1。
