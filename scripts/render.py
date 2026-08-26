@@ -217,23 +217,31 @@ def check(md: str, base: Path) -> list:
     sec = None        # (行号, 小节标题) 仅操作小节
     sec_steps = 0
     sec_imgs = 0
+    sec_step_imgs = 0  # 出现在第一条步骤之后的图：节首概览图不算过程图
+    sec_entry = None   # 首步是创建/添加类入口动作的行号：入口图和表单图要成对
     pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现图或「如图」引用
     sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
     sec_figref = False  # 小节正文有「如图/见图/与图 X-Y」引用，视同有图
 
     def flush_section():
-        nonlocal sec, sec_steps, sec_imgs, pend, sec_ui, sec_figref
+        nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry
         if sec and sec_steps >= 2 and sec_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
-                         f"操作序列至少要有入口图、过程图、结果图（能合并的合并）")
+                         f"操作序列要有入口图、过程图、结果图")
+        elif sec and sec_steps >= 2 and sec_step_imgs == 0 and not sec_figref:
+            probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」的 {sec_steps} 个步骤之间没有一张过程图，"
+                         f"节首的概览图不算；给关键交互补图，或在步骤文字里「如图 X-Y」引用前文的图")
+        if sec and sec_entry and sec_imgs < 2 and not sec_figref:
+            probs.append(f"行{sec_entry}: 小节「{sec[1]}」首步是新增入口动作，但节内只有 {sec_imgs} 张图："
+                         f"入口图（列表页框出按钮）和表单图要成对；入口在前文图里的，步骤里「见图 X-Y」引用")
         if pend:
             probs.append(f"行{pend}: 核对类步骤点名了多个字段，但小节内此后没有配图，"
                          f"文字里也没有「如图 X-Y」引用；补图或指给读者看")
-        if sec and sec_imgs == 0 and sec_ui and not sec_figref:
-            probs.append(f"行{sec_ui[0]}: 小节「{sec[1]}」提到「{sec_ui[1]}」但整节没有配图，"
-                         f"文字里也没有「如图 X-Y」引用；界面元素写进正文就要能在图里找到，"
-                         f"补图或引用前文的图（描述性小节同样适用）")
-        sec, sec_steps, sec_imgs, pend, sec_ui, sec_figref = None, 0, 0, None, None, False
+        if sec and sec_ui:
+            probs.append(f"行{sec_ui[0]}: 小节「{sec[1]}」的描述提到「{sec_ui[1]}」，但此后到节末"
+                         f"没有配图也没有「如图 X-Y」引用；界面元素写进正文就要能在图里找到，"
+                         f"补图或引用前文的图（描述性小节同样适用，节首已有图不豁免）")
+        sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry = None, 0, 0, 0, None, None, False, None
 
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
@@ -288,7 +296,10 @@ def check(md: str, base: Path) -> list:
         im = IMG_RE.match(line)
         if im:
             sec_imgs += 1
+            if sec_steps > 0:
+                sec_step_imgs += 1
             pend = None
+            sec_ui = None
             alt, src = im.group(1), im.group(2)
             nxt = ""
             for k in range(ln, min(ln + 3, len(lines_all))):
@@ -337,14 +348,18 @@ def check(md: str, base: Path) -> list:
                                      f"重新框选让它整个落在画面内")
             continue
 
-        # 界面元素落图检查的素材采集：图注行（<small）不算正文提及
+        # 界面元素落图检查：描述行（非步骤行）提到界面元素记一笔账，
+        # 之后出现配图或「如图 X-Y」引用即销账；图注行（<small）不算正文提及。
+        # 步骤行不记：步骤序列的图文对应由过程图检查负责。
         if sec and not line.lstrip().startswith("<small"):
-            if not sec_figref and re.search(r"如图|见图|[与同]图\s*\d+-\d+", line):
-                sec_figref = True
-            if sec_ui is None:
-                ui = re.search(r"页签|按钮|下拉|点开?「[^」]+」", line)
+            is_step = bool(re.match(r"^\s*\d+\.\s", line))
+            if sec_ui is None and sec_imgs == 0 and not is_step and not line.lstrip().startswith(("|", ">", "#")):
+                ui = re.search(r"页签|按钮|下拉|弹窗|点开?「[^」]+」", line)
                 if ui:
                     sec_ui = (ln, ui.group(0))
+            if re.search(r"如图|见图|[与同]图\s*\d+-\d+", line):
+                sec_figref = True
+                sec_ui = None
 
         if line.lstrip().startswith("|"):
             cells = [c.strip().strip("*") for c in line.strip().strip("|").split("|")]
@@ -393,6 +408,8 @@ def check(md: str, base: Path) -> list:
         if sm:
             sec_steps += 1
             stext = sm.group(2)
+            if sec_steps == 1 and re.search(r"点[^。]*「[^」]*(创建|添加数据|新建)[^」]*」", stext):
+                sec_entry = ln
             if (stext.count("、") >= 1
                     and re.search(r"查看|核对|确认|检查", stext)
                     and "无误" not in stext
