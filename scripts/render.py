@@ -216,7 +216,9 @@ def check(md: str, base: Path) -> list:
     LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：")
     # 陈词与例句照抄（user-manual-humanize.md）：AI 腔陈词，以及写作规范例句的特征片段
     STOCK = ("旨在", "致力于", "助力", "赋能", "极大提升", "高效便捷", "一目了然",
-             "轻松实现", "值得注意的是", "总而言之", "综上所述", "众所周知", "底册")
+             "轻松实现", "值得注意的是", "总而言之", "综上所述", "众所周知")
+    # 书面行话与程序员说法：读者口头不会这么说（user-manual-humanize.md「用读者嘴里的词」）
+    JARGON = ("底册", "的串", "字符串", "拼接", "序列化", "映射关系")
     ECHO = ("按下面步骤", "取数的档案")
     dup_clauses: dict = {}   # 归一化子句 -> [行号]，抓跨章模板复读
     section_title = ""       # 当前 h3 小节标题，用于常见问题格式检查
@@ -404,6 +406,10 @@ def check(md: str, base: Path) -> list:
         for w in STOCK:
             if w in line:
                 probs.append(f"行{ln}: 正文出现陈词「{w}」：价值用具体业务结果说，见 user-manual-humanize.md")
+        for w in JARGON:
+            if w in line:
+                probs.append(f"行{ln}: 正文出现行话「{w}」：换成一线业务人员口头会说的词，"
+                             f"见 user-manual-humanize.md「用读者嘴里的词」")
         for w in ECHO:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：这是写作规范例句的措辞，例句只示意结构，换自己的说法")
