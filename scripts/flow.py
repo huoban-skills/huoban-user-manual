@@ -228,6 +228,34 @@ def render_svg(data: dict) -> str:
     return "".join(p)
 
 
+def check_wording(data: dict) -> list:
+    """节点文字按正文同一套措辞规则查。
+
+    流程图长期在机检之外：正文里「回写」「拉取」改干净了，图上照旧挂着，
+    读者先看图后读正文，图才是第一印象。词表从 render.py 引，不复制一份。
+    """
+    try:
+        from render import JARGON, STOCK, WORDY
+    except Exception:
+        return ["措辞检查没跑：同目录下找不到 render.py，节点文字里的行话无人核对"]
+    probs = []
+    for g in data.get("groups", []):
+        gname = g.get("name", "?")
+        for st in g.get("steps", []):
+            t = st.get("text", "")
+            for w in JARGON:
+                if w in t:
+                    probs.append(f"「{gname}」节点「{t}」出现行话「{w}」："
+                                 f"换成一线业务人员口头会说的词")
+            for w in STOCK:
+                if w in t:
+                    probs.append(f"「{gname}」节点「{t}」出现陈词「{w}」")
+            for w in WORDY:
+                if w in t:
+                    probs.append(f"「{gname}」节点「{t}」出现官腔动词「{w}」：动词直给")
+    return probs
+
+
 def main(argv):
     if len(argv) != 3:
         print(__doc__.strip(), file=sys.stderr)
@@ -237,6 +265,12 @@ def main(argv):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_svg(data), encoding="utf-8")
     print(str(out))
+    probs = check_wording(data)
+    if probs:
+        print(f"× 节点措辞 {len(probs)} 处问题：", file=sys.stderr)
+        for x in probs:
+            print(f"  {x}", file=sys.stderr)
+        return 2
     return 0
 
 
