@@ -8,7 +8,7 @@
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、
 入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图、跨步骤不引图号、
 册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头、
-正文不用 HTML 标签），
+正文不用 HTML 标签、章开场句式（名词化定义、疑问代词排比、泛指「你」、主语堆叠）、官腔动词），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
 
@@ -243,6 +243,9 @@ def check(md: str, base: Path) -> list:
     JARGON = ("底册", "的串", "字符串", "拼接", "序列化", "映射关系",
               "需求行", "清单行", "明细行", "工序行", "数据行")
     ECHO = ("按下面步骤", "取数的档案")
+    # 官腔动词：动词直给（user-manual-humanize.md「动词直给」）。
+    # 「作为」不整词封禁——"作为默认单价带出"是正当用法，只拦「作为……角色」句式。
+    WORDY = ("进行", "实现", "予以", "加以", "用于")
     dup_clauses: dict = {}   # 归一化子句 -> [行号]，抓跨章模板复读
     section_title = ""       # 当前 h3 小节标题，用于常见问题格式检查
     sec = None        # (行号, 小节标题) 仅操作小节
@@ -257,6 +260,7 @@ def check(md: str, base: Path) -> list:
     entry_needs = []   # [(行号, 小节名, 图号)] 入口图待验标注框
     pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现配图
     sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
+    open_pending = False  # 章标题刚过、还没遇到本章开场第一段
 
     def flush_section():
         nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_entry
@@ -324,6 +328,7 @@ def check(md: str, base: Path) -> list:
                         probs.append(f"行{ln}: 章序号「{mm.group(1)}、」不连续，期望第 {ch + 1} 章")
                     ch = num if num else ch + 1
                 minor = fig = 0
+                open_pending = True
             elif level == 3:
                 mm = re.match(r"^(\d+)\.(\d+)\s+(\S.*)$", title)
                 if not mm:
@@ -397,6 +402,32 @@ def check(md: str, base: Path) -> list:
                                      f"重新框选让它整个落在画面内")
             continue
 
+        # —— 章开场句式检查：册头导语各段 + 每章标题后的第一段 ——
+        # 生硬集中在开场那几句：名词化定义、疑问代词排比、泛指的「你」、主语堆叠。
+        # 正例见 writing-guide「场景介绍写法」、user-manual-humanize「指代补全」。
+        _s0 = line.strip()
+        _plain = (_s0 and not _s0.startswith(("|", ">", "<small", "-", "*", "!", "#"))
+                  and not re.match(r"^\d+\.\s", _s0) and not line.startswith("    "))
+        if _plain and (open_pending or (ch == 0 and h1_count == 1)):
+            open_pending = False
+            _first = re.split(r"[。！？]", _s0)[0]
+            _clause = re.split(r"[，。：]", _s0)[0]
+            if re.search(r"记的是|指的是", _first) or re.search(r"的(来源|地方|档案|前提)$", _clause):
+                probs.append(f"行{ln}: 章开场拿名词化定义起头（「记的是 / 是……的来源」）；"
+                             f"用读者的处境或动作起头，动词说清它管什么用"
+                             f"（见 writing-guide「场景介绍写法」）")
+            if len(re.findall(r"[什谁][么买]?的", _s0)) >= 2:
+                probs.append(f"行{ln}: 章开场堆疑问代词排比（什么的/谁的/向谁买的）；"
+                             f"视角统一成这个角色在业务里干什么"
+                             f"（见 user-manual-humanize.md「句式不套路」）")
+            if "你" in _s0:
+                probs.append(f"行{ln}: 章开场用「你」泛指读者；主语写具体角色（销售、采购、仓管、财务）"
+                             f"或具体的物，公司层面的往来写「公司」"
+                             f"（见 user-manual-humanize.md「指代补全」）")
+            if _clause.count("「") >= 3:
+                probs.append(f"行{ln}: 章开场首句把一长串「」名词堆在主语位，读者读到句尾才知道在说什么；"
+                             f"先一句给结论，再展开列举")
+
         # 界面元素落图检查：描述行（非步骤行）提到界面元素记一笔账，
         # 之后出现配图即销账；图注行（<small）不算正文提及。
         # 步骤行不记：步骤序列的图文对应由过程图检查负责。
@@ -444,6 +475,14 @@ def check(md: str, base: Path) -> list:
         for w in ECHO:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：这是写作规范例句的措辞，例句只示意结构，换自己的说法")
+        for w in WORDY:
+            if w in line:
+                probs.append(f"行{ln}: 正文出现官腔动词「{w}」：动词直给——"
+                             f"「对数据进行核对」就是「核对数据」，「无法实现余额管理」写成读者看得见的现象"
+                             f"（见 user-manual-humanize.md「动词直给」）")
+        if re.search(r"作为.{0,8}角色", line):
+            probs.append(f"行{ln}: 正文出现「作为……角色」句式：是就写「是」，有就写「有」，"
+                         f"见 user-manual-humanize.md「动词直给」")
 
         lb = re.match(r"^\s*\*{0,2}(进入路径|进入方式|入口|访问路径)\*{0,2}[:：]", line)
         if lb:
