@@ -6,7 +6,7 @@
 
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、
-入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图或图引用、
+入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图、跨步骤不引图号、
 册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头、
 正文不用 HTML 标签），
 有问题逐条打印并以退出码 2 结束；
@@ -251,39 +251,39 @@ def check(md: str, base: Path) -> list:
     sec_step_imgs = 0  # 出现在第一条步骤之后的图：节首概览图不算过程图
     sec_entry = None   # 首步是创建/添加类入口动作的行号：入口图和表单图要成对
     last_step = None   # (行号, 正文) 当前步骤块的最后一步，块结束时校验末步带不带结果
-    sec_entry_ref = None  # 入口步骤里「见图 X-Y」指向的图号
     sec_first_img = None  # 本节第一张图的图号
+    last_fig = None   # 正文里最近出现的一张图的图号：紧跟其后的续讲可以点它的名
     fig_map = {}       # 图号 -> (行号, 相对路径)
     entry_needs = []   # [(行号, 小节名, 图号)] 入口图待验标注框
-    pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现图或「如图」引用
+    pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现配图
     sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
-    sec_figref = False  # 小节正文有「如图/见图/与图 X-Y」引用，视同有图
 
     def flush_section():
-        nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry
-        nonlocal sec_entry_ref, sec_first_img
+        nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_entry
+        nonlocal sec_first_img, last_fig
         if sec and sec_steps >= 2 and sec_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」有 {sec_steps} 个步骤但没有一张配图，"
                          f"操作序列要有入口图、过程图、结果图")
-        elif sec and sec_steps >= 2 and sec_step_imgs == 0 and not sec_figref:
+        elif sec and sec_steps >= 2 and sec_step_imgs == 0:
             probs.append(f"行{sec[0]}: 操作小节「{sec[1]}」的 {sec_steps} 个步骤之间没有一张过程图，"
-                         f"节首的概览图不算；给关键交互补图，或在步骤文字里「如图 X-Y」引用前文的图")
+                         f"节首的概览图不算；给关键交互补图")
         if sec and sec_entry:
-            _num = sec_entry_ref or sec_first_img
+            _num = sec_first_img
             if _num:
                 entry_needs.append((sec_entry, sec[1], _num))
-        if sec and sec_entry and sec_imgs < 2 and not sec_figref:
+        if sec and sec_entry and sec_imgs < 2:
             probs.append(f"行{sec_entry}: 小节「{sec[1]}」首步是新增入口动作，但节内只有 {sec_imgs} 张图："
-                         f"入口图（列表页框出按钮）和表单图要成对；入口在前文图里的，步骤里「见图 X-Y」引用")
+                         f"入口图（列表页或详情页框出按钮）和表单图要成对，各截各的")
         if pend:
             probs.append(f"行{pend}: 核对类步骤点名了多个字段，但小节内此后没有配图，"
-                         f"文字里也没有「如图 X-Y」引用；补图或指给读者看")
+                         f"补图给读者看")
         if sec and sec_ui:
             probs.append(f"行{sec_ui[0]}: 小节「{sec[1]}」的描述提到「{sec_ui[1]}」，但此后到节末"
-                         f"没有配图也没有「如图 X-Y」引用；界面元素写进正文就要能在图里找到，"
-                         f"补图或引用前文的图（描述性小节同样适用，节首已有图不豁免）")
-        sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_figref, sec_entry = None, 0, 0, 0, None, None, False, None
-        sec_entry_ref, sec_first_img = None, None
+                         f"没有配图；界面元素写进正文就要能在图里找到，"
+                         f"给这一节补图（描述性小节同样适用，节首已有图不豁免）")
+        sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_entry = None, 0, 0, 0, None, None, None
+        sec_first_img = None
+        last_fig = None   # 换节即失效：续讲只在同一节里紧跟着图才成立
 
     for ln, raw in enumerate(md.splitlines(), 1):
         line = raw.rstrip()
@@ -346,6 +346,7 @@ def check(md: str, base: Path) -> list:
             _fn = re.search(r"图 (\d+-\d+)", im.group(1))
             if _fn:
                 fig_map[_fn.group(1)] = (ln, im.group(2))
+                last_fig = _fn.group(1)
                 if sec_first_img is None:
                     sec_first_img = _fn.group(1)
             alt, src = im.group(1), im.group(2)
@@ -397,7 +398,7 @@ def check(md: str, base: Path) -> list:
             continue
 
         # 界面元素落图检查：描述行（非步骤行）提到界面元素记一笔账，
-        # 之后出现配图或「如图 X-Y」引用即销账；图注行（<small）不算正文提及。
+        # 之后出现配图即销账；图注行（<small）不算正文提及。
         # 步骤行不记：步骤序列的图文对应由过程图检查负责。
         if sec and not line.lstrip().startswith("<small"):
             is_step = bool(re.match(r"^\s*\d+\.\s", line))
@@ -405,9 +406,15 @@ def check(md: str, base: Path) -> list:
                 ui = re.search(r"页签|按钮|下拉|弹窗|点开?「[^」]+」", line)
                 if ui:
                     sec_ui = (ln, ui.group(0))
-            if re.search(r"如图|见图|[与同]图\s*\d+-\d+", line):
-                sec_figref = True
-                sec_ui = None
+            # 跨步骤引用图号：一张图只带一套标注框，框是照着它所在那一步画的，
+            # 引到别处框就对不上；增删图还会让图号顺移，引用变断链。各步骤各截各的图。
+            # 紧邻上一张图的续讲不算（同一张图分两段讲，框就是照着它画的）。
+            for _r in re.finditer(r"图\s?(\d+-\d+)", line):
+                if _r.group(1) != last_fig:
+                    probs.append(f"行{ln}: 正文引用了别处的「图 {_r.group(1)}」"
+                                 f"（本节最近一张图是 {last_fig or '无'}）；"
+                                 f"一张图只带一套标注框，引到别处框就对不上这一步。"
+                                 f"给这一步单独截图、单独画框，同一个页面被两步用到就截两张")
 
         if line.lstrip().startswith("|"):
             cells = [c.strip().strip("*") for c in line.strip().strip("|").split("|")]
@@ -475,13 +482,9 @@ def check(md: str, base: Path) -> list:
             last_step = (ln, stext.strip())
             if sec_steps == 1 and re.search(r"点[^。]*「[^」]*(创建|添加数据|新建)[^」]*」", stext):
                 sec_entry = ln
-                r = re.search(r"[见如同]图\s?(\d+-\d+)", stext)
-                if r:
-                    sec_entry_ref = r.group(1)
             if (stext.count("、") >= 1
                     and re.search(r"查看|核对|确认|检查", stext)
-                    and "无误" not in stext
-                    and not re.search(r"[如同见]图\s?\d+-\d+", stext)):
+                    and "无误" not in stext):
                 pend = ln
             if step_expect == 0:
                 step_expect = 1
