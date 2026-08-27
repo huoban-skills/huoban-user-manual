@@ -86,4 +86,4 @@ CHANGELOG/
 └── archive/                    # 逐日过程记录
 ```
 
-变更历史见 [CHANGELOG/](CHANGELOG/)：版本汇总在目录下，逐日过程记录在 `archive/`。当前版本 v1.1。
+变更历史见 [CHANGELOG/](CHANGELOG/)：版本汇总在目录下，逐日过程记录在 `archive/`。当前版本 v1.2。
