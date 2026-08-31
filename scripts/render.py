@@ -7,7 +7,8 @@
 渲染后自动跑格式机检（章序号连续、小节编号对齐、图号图注格式、步骤序号、
 图片相对路径且存在、操作小节图文对应、内部行话不入正文、
 入口图必须有标注框、标注不出界、图注行与 alt 一致、核对类步骤有图、跨步骤不引图号、
-册名合规、总览图在册头、常见问题格式、outline.md 存在、元信息变体、字段表列头、
+册名合规、总览图在册头、业务流程册必须有册头总览图、正文不用围栏代码块、
+常见问题格式、outline.md 存在、元信息变体、字段表列头、
 正文不用 HTML 标签、章开场句式（名词化定义、疑问代词排比、泛指「你」、主语堆叠）、官腔动词），
 有问题逐条打印并以退出码 2 结束；
 机检规则见 check()。
@@ -254,6 +255,7 @@ def check(md: str, base: Path) -> list:
     ch_title = ""     # 当前章标题：看板类章节的图免框，操作流程章节的图一律要框
     step_expect = 0   # 当前步骤块的下一个期望序号；0 = 不在步骤块里
     in_code = False
+    head_svg = False  # 册头（第一章之前）有没有 SVG 总览流程图
 
     # 操作小节的图文对应：有步骤没配图的小节要报出来（字段说明等纯参考小节豁免）。
     NO_IMG_OK = ("字段说明", "注意事项", "常见问题", "核对字段", "改动影响")
@@ -304,6 +306,13 @@ def check(md: str, base: Path) -> list:
         line = raw.rstrip()
         if line.lstrip().startswith("```"):
             in_code = not in_code
+            if in_code:
+                # 手册读者是业务人员，正文没有围栏代码块的正当用途。
+                # 实测的漏法：册头该用 flow.py 出 SVG，改成在代码块里敲 ASCII 流程图，
+                # 图注和图号检查都绕过去了，交付前谁也没发现。
+                probs.append(f"行{ln}: 正文出现围栏代码块；手册里不放代码。"
+                             f"册头全流程图用 flow.py 出 SVG（flow.json → images/0-全流程总览.svg），"
+                             f"短流程用文本箭头 → 直接写进正文")
             continue
         if in_code:
             continue
@@ -382,6 +391,8 @@ def check(md: str, base: Path) -> list:
                     probs.append(f"行{ln}: 图注行「{cap}」和 alt「{alt}」对不上，两处要一致")
             if ch == 0:
                 # 第一章之前只有册头总览流程图，图注不编图号，只查路径和文件
+                if src.lower().endswith(".svg"):
+                    head_svg = True
                 if src.startswith(("/", "http://", "https://")):
                     probs.append(f"行{ln}: 图片「{src}」必须用相对路径（images/…）")
                 elif not (base / src).exists():
@@ -566,6 +577,19 @@ def check(md: str, base: Path) -> list:
     if pil_skipped:
         probs.append(f"环境缺 Pillow：{pil_skipped} 张图的标注框检查没跑（画没画框、框有没有出界这两项）。"
                      f"这一轮的结果不含这两项，装上再跑一次：pip install pillow")
+    # 业务流程册的册头固定配一张 flow.py 出的全流程图。骨架里自己写了「业务流程型」
+    # 却没出图，是实测漏过的一种：正文照样通过其余全部检查。
+    _outline = base / "outline.md"
+    if _outline.exists() and not head_svg:
+        _o = _outline.read_text(encoding="utf-8", errors="ignore")
+        # 只认「模块类型：」那一行的取值。整篇搜「业务流程」会被正文里的
+        # 「归各业务流程册」这类说明命中（基础资料册实测误伤）。
+        _m = re.search(r"^\s*[-*]?\s*模块类型[：:]\s*(.+)$", _o, re.M)
+        if _m and "业务流程" in _m.group(1):
+            probs.append("outline.md 写的是业务流程型模块，但册头没有 SVG 全流程图。"
+                         "写 flow.json 后跑 flow.py 出图："
+                         "python3 scripts/flow.py flow.json images/0-全流程总览.svg，"
+                         "图放在模块介绍后面、第一章之前")
     return probs
 
 
