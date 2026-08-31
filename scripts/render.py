@@ -245,7 +245,7 @@ def check_evidence(md: str, base: Path, metas: dict) -> list:
                 sec_ui |= {(tg.get("ui_text") or "").strip() for tg in m.get("targets", [])}
         if sec_ui:
             for ln, raw in txt:
-                for mm in re.finditer(r"点[击开]?「(%s)」" % "|".join(NEW_BTNS), raw):
+                for mm in re.finditer(r"点[击开]?[^。，；：「」]{0,6}「(%s)」" % "|".join(NEW_BTNS), raw):
                     w = mm.group(1)
                     if w in sec_ui:
                         continue
@@ -1051,10 +1051,11 @@ def check_vocab(md: str, vocab_path, ui: set, has_evidence: bool):
     allow = vocab | ui
     probs, notes, seen = [], [], set()
     # 点击语境：点/勾「X」，以及"行内选「X」""右上角选「X」"这类位置词+选——
-    # 后者实测里都是按钮点击，不是表单选项
-    click_pat = re.compile(r"(?:[点勾]开?[击选]?|(?:行内|行末|右上角|列表右侧|操作列)[^。，」]{0,4}选)「([^」]{1,20})」")
+    # 后者实测里都是按钮点击，不是表单选项。动词和「」之间允许短方位词
+    # （"点行末的「核销应收」""点右上角「添加数据」"），贴死会整类漏检。
+    click_pat = re.compile(r"(?:[点勾]开?[击选]?[^。，；：「」]{0,6}|(?:行内|行末|右上角|列表右侧|操作列)[^。，」]{0,4}选)「([^」]{1,20})」")
     pats = [
-        r"[填选点勾]开?[击选]?「([^」]{1,20})」",
+        r"[填选点勾]开?[击选]?[^。，；：「」]{0,6}「([^」]{1,20})」",
         r"「([^」]{1,20})」(?=必填|是必填|会变空|自动生成|不用填)",
     ]
     in_code = False
@@ -1097,9 +1098,13 @@ def check_outline(md: str, base: Path) -> list:
     if not p.exists():
         return []           # outline 缺失由既有检查负责
     text = p.read_text(encoding="utf-8", errors="ignore")
-    if "章节清单" not in text:
-        return ["outline.md 没有「章节清单」段：骨架要列出章和操作小节，它是确认点一的凭证"]
-    rest = text[text.index("章节清单"):]
+    # 认标题行定位，不裸搜子串：outline 正文里先提到「章节清单」四个字会把段落切错
+    _h = re.search(r"^#{1,3}[^\n]*章节清单", text, re.M)
+    if not _h:
+        if "章节清单" not in text:
+            return ["outline.md 没有「章节清单」段：骨架要列出章和操作小节，它是确认点一的凭证"]
+        _h = re.search(r"章节清单", text)
+    rest = text[_h.start():]
     nxt = rest.find("\n## ")
     seg = rest if nxt == -1 else rest[:nxt]
     subs = [m.group(1).strip() for m in re.finditer(r"^\s+[-*]\s+(\S.*)$", seg, re.M)]
