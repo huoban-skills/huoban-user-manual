@@ -13,8 +13,11 @@
 再跑截图证据语义审计（每张 PNG 有 shot 落盘的 .meta.json、正文界面词有截图证据背书、
 hac 内部名不冒充界面词、框住的元素正文都提到、多框角标顺序＝正文顺序、
 notes.md 点位记到每张入册图），
+以及覆盖度门禁（outline 章节清单细到操作小节且正文逐一存在、常见问题小节不许空壳、
+改版任务传 --baseline <旧版.md> 对照小节集合和常见问题条数，缩水即报），
 有问题逐条打印并以退出码 2 结束；
-格式规则见 check()，证据规则见 check_evidence() / check_vocab()。
+格式规则见 check()，证据规则见 check_evidence() / check_vocab()，
+覆盖度规则见 check_outline() / check_baseline()。
 
 Markdown 约定（与 writing-guide 一致，只认这些）：
   # 标题            册头/篇名；紧随其后的第一段渲染为导语，自动插目录
@@ -128,8 +131,11 @@ PLATFORM_UI = {
 
 
 # —— 措辞词表：本文件是唯一事实源，flow.py 复用同一份查流程图节点 ——
-# 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔
-LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：")
+# 内部行话和元信息不许进正文：走查是 skill 术语，核验日期/本册适用于是说明书腔。
+# 「以下操作对应/对应工作区」是实测踩过的绕法——机检拦了「本手册对应」，
+# 模型换个触发词接着写，所以变体也逐个钉死。
+LEAKS = ("走查", "核验日期", "本册适用于", "本手册旨在", "本手册", "适用范围：", "适用对象：",
+         "以下操作对应", "对应工作区", "工作区 ID", "工作区ID", "采集时间")
 # 陈词与例句照抄（user-manual-humanize.md）：AI 腔陈词，以及写作规范例句的特征片段
 STOCK = ("旨在", "致力于", "助力", "赋能", "极大提升", "高效便捷", "一目了然",
          "轻松实现", "值得注意的是", "总而言之", "综上所述", "众所周知")
@@ -417,6 +423,8 @@ def check(md: str, base: Path) -> list:
     pend = None       # 核对类步骤的行号：点名了多个字段，等本小节后续出现配图
     sec_ui = None     # (行号, 命中词) 小节正文提到页签/按钮等界面元素
     open_pending = False  # 章标题刚过、还没遇到本章开场第一段
+    faq_open = None   # (行号, 标题) 当前在常见问题小节里
+    faq_entries = 0   # 该小节已见的问答条数
 
     def flush_section():
         nonlocal sec, sec_steps, sec_imgs, sec_step_imgs, pend, sec_ui, sec_entry
@@ -464,11 +472,20 @@ def check(md: str, base: Path) -> list:
         if m:
             step_expect = 0
             level, title = len(m.group(1)), m.group(2).strip()
+            # 常见问题小节收尾：只有标题没有一条问答，是"删条目消检查面"的形态
+            if faq_open and faq_entries == 0 and level <= 3:
+                probs.append(f"行{faq_open[0]}: 「{faq_open[1]}」小节没有一条问答；"
+                             f"常见问题至少一条加粗编号问句（**1. 问题？**），"
+                             f"暂无积累就标 [待补充]，不许留空壳过检")
+            if level <= 3:
+                faq_open = None
             if level in (2, 3):
                 flush_section()
 
             if level == 3:
                 section_title = title
+                if "常见问题" in title:
+                    faq_open, faq_entries = (ln, title), 0
             if level == 2:
                 section_title = ""
             if level == 3 and not any(k in title for k in NO_IMG_OK):
@@ -641,6 +658,9 @@ def check(md: str, base: Path) -> list:
                              f"按钮叫什么以截图证据为准，逐词用「」引出来（没亲眼见过的按钮不写）")
                 break
 
+        if faq_open and re.match(r"^\s*(\*\*\d+[.、]|####\s|\[待补充\])", line):
+            faq_entries += 1
+
         if "常见问题" in section_title and re.match(r"^\*?\*?[QA][：:]", line.strip()):
             probs.append(f"行{ln}: 常见问题不用 Q/A 前缀，问题写成加粗编号行「**1. 问题？**」，答案直接跟在下面")
 
@@ -652,6 +672,13 @@ def check(md: str, base: Path) -> list:
         for w in LEAKS:
             if w in line:
                 probs.append(f"行{ln}: 正文出现「{w}」：内部行话和元信息不进手册（环境缺陷、走查情况记 notes.md）")
+
+        # 实施元信息的数字形态：工作区/表 ID（13 位以上长数字）、应用版本号。
+        # 单号示例（DD20260810001）不足 13 位数字连排，不误伤。
+        if re.search(r"\d{13,}", line):
+            probs.append(f"行{ln}: 正文出现长数字 ID（工作区/表 ID 一类）；实施元信息记 notes.md，不进手册")
+        if re.search(r"\bv\d+\.\d+", line):
+            probs.append(f"行{ln}: 正文出现应用版本号（v1.6.0 这类）；版本、环境信息记 notes.md，不进手册")
 
         for w in STOCK:
             if w in line:
@@ -722,6 +749,10 @@ def check(md: str, base: Path) -> list:
             step_expect = 0
 
     flush_section()
+    if faq_open and faq_entries == 0:
+        probs.append(f"行{faq_open[0]}: 「{faq_open[1]}」小节没有一条问答；"
+                     f"常见问题至少一条加粗编号问句（**1. 问题？**），"
+                     f"暂无积累就标 [待补充]，不许留空壳过检")
 
     for _ln, _title, _num in entry_needs:
         _hit = fig_map.get(_num)
@@ -1055,6 +1086,69 @@ def check_vocab(md: str, vocab_path, ui: set, has_evidence: bool):
     return probs, notes
 
 
+def check_outline(md: str, base: Path) -> list:
+    """骨架小节级核对：outline 章节清单里列出的操作小节，正文必须逐一存在。
+
+    改版实测的教训：机检报错后弱模型靠删小节、并小节缩小检查面，机检照样绿。
+    骨架是用户确认的覆盖合同，细到小节级逐条核对，删内容就会在这里现形。
+    只核 outline → 正文方向；常见问题、注意事项这类固定小节不用写进骨架。
+    """
+    p = base / "outline.md"
+    if not p.exists():
+        return []           # outline 缺失由既有检查负责
+    text = p.read_text(encoding="utf-8", errors="ignore")
+    if "章节清单" not in text:
+        return ["outline.md 没有「章节清单」段：骨架要列出章和操作小节，它是确认点一的凭证"]
+    rest = text[text.index("章节清单"):]
+    nxt = rest.find("\n## ")
+    seg = rest if nxt == -1 else rest[:nxt]
+    subs = [m.group(1).strip() for m in re.finditer(r"^\s+[-*]\s+(\S.*)$", seg, re.M)]
+    if not subs:
+        return ["outline.md 章节清单没细到操作小节：每章下面用缩进列表列出操作小节名"
+                "（如新建、核销、审批各一节），随确认点一让用户确认；"
+                "机检拿它核正文覆盖度，删小节、并小节都会在这里报出来"]
+    titles = " | ".join(re.sub(r"^\d+\.\d+\s*", "", t).strip()
+                        for t in re.findall(r"^###\s+(.*)$", md, re.M))
+    probs = []
+    for s in subs:
+        name = re.sub(r"[（(].*?[)）]", "", s).strip()
+        if name and name not in titles:
+            probs.append(f"outline.md 章节清单里的小节「{name}」在正文找不到对应 ### 小节；"
+                         f"骨架是用户确认的覆盖合同，不许删小节、并小节消化机检报错；"
+                         f"骨架本身要调整就改 outline 并重新让用户确认")
+    return probs
+
+
+def check_baseline(md: str, baseline_path) -> list:
+    """改版覆盖度对照：新版相对旧版（--baseline）不许缩水。
+
+    旧版的事实可能有错，但小节承载的业务点不能凭空消失——纠错是改内容不是删小节。
+    对照两项：三级小节标题集合、常见问题条数。
+    """
+    try:
+        old = Path(baseline_path).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return [f"--baseline 读不到：{baseline_path}"]
+
+    def secs(t):
+        return {re.sub(r"^\d+\.\d+\s*", "", x).strip() for x in re.findall(r"^###\s+(.*)$", t, re.M)}
+
+    def faqs(t):
+        return len(re.findall(r"^\s*(?:\*\*\d+[.、]|####\s)", t, re.M))
+
+    probs = []
+    miss = sorted(secs(old) - secs(md))
+    if miss:
+        probs.append(f"对照基线少了 {len(miss)} 个小节：{'、'.join(miss[:8])}"
+                     + ("等" if len(miss) > 8 else "")
+                     + "；改版不许用删小节消化机检报错——业务点保留，事实按证据逐项纠")
+    fo, fn = faqs(old), faqs(md)
+    if fn < fo:
+        probs.append(f"常见问题从基线的 {fo} 条缩到 {fn} 条；能被证据支撑的逐条恢复，"
+                     f"确实站不住的在 notes.md 列明原因，交付时报给用户裁决")
+    return probs
+
+
 def collapse_probs(probs: list, keep: int = 5, threshold: int = 8) -> list:
     """同一条规则的报错刷屏时折叠：只留前几条 + 一行汇总。
 
@@ -1082,12 +1176,18 @@ def main():
         sys.exit(__doc__)
     src = Path(sys.argv[1])
     dst = Path(sys.argv[2]) if len(sys.argv) > 2 else src.with_suffix(".html")
-    vocab_path = None
+    vocab_path = baseline_path = None
     argv = sys.argv[1:]
-    if "--vocab" in argv:
-        i = argv.index("--vocab")
-        vocab_path = argv[i + 1] if i + 1 < len(argv) else None
-        argv = argv[:i] + argv[i + 2:]
+    for flag in ("--vocab", "--baseline"):
+        if flag in argv:
+            i = argv.index(flag)
+            val = argv[i + 1] if i + 1 < len(argv) else None
+            if flag == "--vocab":
+                vocab_path = val
+            else:
+                baseline_path = val
+            argv = argv[:i] + argv[i + 2:]
+    if vocab_path or baseline_path:
         src = Path(argv[0])
         dst = Path(argv[1]) if len(argv) > 1 else src.with_suffix(".html")
     md = src.read_text(encoding="utf-8")
@@ -1096,6 +1196,9 @@ def main():
     metas, ui = load_evidence(src.parent)
     probs = check(md, src.parent)
     probs += check_evidence(md, src.parent, metas)
+    probs += check_outline(md, src.parent)
+    if baseline_path:
+        probs += check_baseline(md, baseline_path)
     hard, vocab_notes = check_vocab(md, vocab_path, ui, bool(metas))
     probs += hard
     if not (src.parent / "outline.md").exists():
