@@ -582,10 +582,18 @@ def check(md: str, base: Path) -> list:
             open_pending = False
             _first = re.split(r"[。！？]", _s0)[0]
             _clause = re.split(r"[，。：]", _s0)[0]
-            if re.search(r"记的是|指的是", _first) or re.search(r"的(来源|地方|档案|前提)$", _clause):
-                probs.append(f"行{ln}: 章开场拿名词化定义起头（「记的是 / 是……的来源」）；"
+            if re.search(r"记的是|指的是|管的是|负责的是", _first) or re.search(r"的(来源|地方|档案|前提)$", _clause):
+                probs.append(f"行{ln}: 章开场拿名词化定义起头（「记的是 / 管的是 / 是……的来源」）；"
                              f"用读者的处境或动作起头，动词说清它管什么用"
                              f"（见 writing-guide「场景介绍写法」）")
+            # 总起冒号句式：「XX 管的是…的全过程：」「这条线上就三件事：」——修辞冒号
+            # 不进开篇（humanize 第 17 条），实测它是各册开头跨册盖章的重灾区。
+            # 只拦抽象总起词收尾的，真枚举（"五张表：商品、仓库…"）不受影响。
+            _m17 = re.match(r"^[^。！？]{4,30}(全?过程|全?流程|[一几两三]件事|主线|闭环|一整条线)：(.{0,16})", _s0)
+            if _m17 and "、" not in _m17.group(2):
+                probs.append(f"行{ln}: 开场用「短句总起：展开」的修辞冒号（"
+                             f"「…的全过程：」这类）；开篇平铺直叙，直接从业务场景讲起，"
+                             f"冒号只留给真枚举（见 user-manual-humanize.md 第 17 条）")
             if len(re.findall(r"[什谁][么买]?的", _s0)) >= 2:
                 probs.append(f"行{ln}: 章开场堆疑问代词排比（什么的/谁的/向谁买的）；"
                              f"视角统一成这个角色在业务里干什么"
@@ -604,7 +612,7 @@ def check(md: str, base: Path) -> list:
         if sec and not line.lstrip().startswith("<small"):
             is_step = bool(re.match(r"^\s*\d+\.\s", line))
             if sec_ui is None and sec_imgs == 0 and not is_step and not line.lstrip().startswith(("|", ">", "#")):
-                ui = re.search(r"页签|按钮|下拉|弹窗|点开?「[^」]+」", line)
+                ui = re.search(r"页签|按钮|下拉|弹窗|点开?「[^」]+」|行[内末][^。，」]{0,4}选「[^」]+」", line)
                 if ui:
                     sec_ui = (ln, ui.group(0))
             # 跨步骤引用图号：一张图只带一套标注框，框是照着它所在那一步画的，
@@ -622,6 +630,16 @@ def check(md: str, base: Path) -> list:
             if cells and cells[0] == "字段" and cells != ["字段", "字段说明", "填写说明"]:
                 probs.append(f"行{ln}: 字段表列头是「{' | '.join(cells)}」，"
                              f"规范是「字段 | 字段说明 | 填写说明」（字段说明讲业务含义，填写说明写必填/选填/自动计算）")
+
+        # 操作列的能力描述必须用「」引界面原词：实测的编造重灾区正是
+        # "列表右侧还可以查看详情、打开核销"这种不带引号的散文——引号词归证据审计管，
+        # 不引号就绕过了机检。把它逼进引号里。
+        for _sent in re.split(r"[。；]", line):
+            if (re.search(r"行内|行末|列表右侧|操作列", _sent) and "「" not in _sent
+                    and re.search(r"详情|审批|核销|收款|付款|对账|编辑|删除|发起|查看|打开", _sent)):
+                probs.append(f"行{ln}: 「{_sent.strip()[:24]}…」描述行内/操作列的能力却没有用「」引界面原词；"
+                             f"按钮叫什么以截图证据为准，逐词用「」引出来（没亲眼见过的按钮不写）")
+                break
 
         if "常见问题" in section_title and re.match(r"^\*?\*?[QA][：:]", line.strip()):
             probs.append(f"行{ln}: 常见问题不用 Q/A 前缀，问题写成加粗编号行「**1. 问题？**」，答案直接跟在下面")
@@ -1001,7 +1019,9 @@ def check_vocab(md: str, vocab_path, ui: set, has_evidence: bool):
         return [], [f"界面名词校验没跑：读不到词表 {vocab_path}"]
     allow = vocab | ui
     probs, notes, seen = [], [], set()
-    click_pat = re.compile(r"[点勾]开?[击选]?「([^」]{1,20})」")
+    # 点击语境：点/勾「X」，以及"行内选「X」""右上角选「X」"这类位置词+选——
+    # 后者实测里都是按钮点击，不是表单选项
+    click_pat = re.compile(r"(?:[点勾]开?[击选]?|(?:行内|行末|右上角|列表右侧|操作列)[^。，」]{0,4}选)「([^」]{1,20})」")
     pats = [
         r"[填选点勾]开?[击选]?「([^」]{1,20})」",
         r"「([^」]{1,20})」(?=必填|是必填|会变空|自动生成|不用填)",
