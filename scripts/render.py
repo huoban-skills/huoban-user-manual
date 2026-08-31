@@ -262,7 +262,8 @@ def check_evidence(md: str, base: Path, metas: dict) -> list:
             tgs = [(t.get("order", i + 1), (t.get("ui_text") or "").strip())
                    for i, t in enumerate(meta.get("targets", []))]
             tgs = [(o, w) for o, w in tgs if 1 <= len(w) <= 12]
-            found = [(o, w, body.find(w)) for o, w in tgs]
+            # body 已去全部空白，目标词也去掉再比对，否则「导入 Excel」这类带空格的词永远失配
+            found = [(o, w, body.find(re.sub(r"\s+", "", w))) for o, w in tgs]
             for o, w, p in found:
                 if p < 0:
                     probs.append(f"行{ln}: 图「{name}」框住了「{w}」，但本节正文没提到它；"

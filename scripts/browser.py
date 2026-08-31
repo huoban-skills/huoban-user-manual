@@ -474,7 +474,12 @@ HIGHLIGHT_ON = """
       const fr = fb.getBoundingClientRect();
       if (fr.height > 2 && fr.top > r.top + 20) bottom = Math.min(bottom, fr.top);
     }
-    let text = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
+    // 表单元素不取 value：值是演示数据（如「演示-客户A」），不是界面原词，
+    // 进了证据会让"框↔正文"审计拿数据值去核正文，必然误报
+    const formEl = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+    let text = (formEl
+      ? (el.getAttribute('aria-label') || el.getAttribute('placeholder') || '')
+      : (el.innerText || el.getAttribute('aria-label') || '')).trim().replace(/\\s+/g, ' ');
     if (text.length > 60) text = text.slice(0, 60);
     items.push({text, rect: [Math.round(r.left), Math.round(r.top),
                              Math.round(r.right - r.left), Math.round(bottom - r.top)]});
