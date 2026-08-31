@@ -5,7 +5,8 @@
   python3 browser.py start [--url https://app.huoban.com]   # 启动浏览器（持久化 profile，首次需人工登录）
   python3 browser.py status                                 # 列出当前所有页面
   python3 browser.py goto --url <url>
-  python3 browser.py snapshot [--max-chars 4000]            # 页面文本 + 可交互元素编号清单
+  python3 browser.py snapshot [--max-chars 4000] [--full]   # 页面文本 + 可交互元素编号清单
+                                                            # 默认只输出与上次的差异，--full 全量
   python3 browser.py click (--index N | --text T | --selector S)
   python3 browser.py type --text "内容" [--enter]           # 输入到当前焦点元素
   python3 browser.py fill --selector S --value V
@@ -311,6 +312,47 @@ def cmd_goto(args):
     run(fn)
 
 
+def snapshot_diff(text: str, els: list, last: dict, max_chars: int):
+    """生成 snapshot 输出：默认只打与上次不同的部分。
+
+    左侧导航、顶栏这些框架文字页页相同，第一次已经看过，之后每次全量重打
+    纯烧 token（一册走查 snapshot 要跑上百次）。页面文本按行比对，元素清单
+    按编号逐位比对、连续相同的折叠成区间——编号是真实编号，click --index 照常用。
+    返回 (输出文本, 本次状态)；状态存盘供下次比对。
+    """
+    out = []
+    lines = [l for l in text.splitlines() if l.strip()]
+    prev = set(last.get("text", []))
+    show = [l for l in lines if l not in prev] if prev else lines
+    skipped = len(lines) - len(show)
+    body = "\n".join(show)
+    if len(body) > max_chars:
+        body = body[:max_chars] + f"\n…（截断，共 {len(body)} 字符）"
+    out.append("--- 页面文本" + (f"（{skipped} 行与上次相同已省略，--full 看全量）" if skipped else "") + " ---")
+    out.append(body if show else "（与上次 snapshot 完全相同）")
+
+    def sig(e):
+        return [e["tag"], e["type"], e["text"]]
+
+    prev_els = last.get("els", [])
+    out.append("\n--- 可交互元素 ---")
+    i, n = 0, len(els)
+    while i < n:
+        if i < len(prev_els) and sig(els[i]) == prev_els[i]:
+            j = i
+            while j < n and j < len(prev_els) and sig(els[j]) == prev_els[j]:
+                j += 1
+            if j - i >= 3:
+                out.append(f"[{i}]~[{j - 1}] （与上次相同）")
+                i = j
+                continue
+        el = els[i]
+        label = el["text"] or f'<{el["tag"]} {el["type"]}>'.strip()
+        out.append(f"[{i}] {el['tag']}{'/' + el['type'] if el['type'] else ''}: {label}")
+        i += 1
+    return "\n".join(out), {"text": lines, "els": [sig(e) for e in els]}
+
+
 def cmd_snapshot(args):
     def fn(page, pages):
         try:
@@ -319,14 +361,20 @@ def cmd_snapshot(args):
             pass
         print(f"URL: {page.url}\n标题: {page.title()}\n")
         text = page.evaluate(TEXT_JS)
-        if len(text) > args.max_chars:
-            text = text[:args.max_chars] + f"\n…（截断，共 {len(text)} 字符）"
-        print("--- 页面文本 ---")
-        print(text)
-        print("\n--- 可交互元素 ---")
-        for i, el in enumerate(page.evaluate(ENUM_JS)):
-            label = el["text"] or f'<{el["tag"]} {el["type"]}>'.strip()
-            print(f"[{i}] {el['tag']}{'/' + el['type'] if el['type'] else ''}: {label}")
+        els = page.evaluate(ENUM_JS)
+        last_p = PROFILE / "snapshot-last.json"
+        last = {}
+        if not args.full:
+            try:
+                last = json.loads(last_p.read_text())
+            except Exception:
+                last = {}
+        body, state = snapshot_diff(text, els, last, args.max_chars)
+        print(body)
+        try:
+            last_p.write_text(json.dumps(state, ensure_ascii=False))
+        except Exception:
+            pass
     run(fn)
 
 
@@ -603,7 +651,9 @@ def main():
     s = sub.add_parser("status"); s.set_defaults(fn=cmd_status)
     s = sub.add_parser("page"); s.add_argument("--index", type=int, required=True); s.set_defaults(fn=cmd_page)
     s = sub.add_parser("goto"); s.add_argument("--url", required=True); s.set_defaults(fn=cmd_goto)
-    s = sub.add_parser("snapshot"); s.add_argument("--max-chars", type=int, default=4000); s.set_defaults(fn=cmd_snapshot)
+    s = sub.add_parser("snapshot"); s.add_argument("--max-chars", type=int, default=4000)
+    s.add_argument("--full", action="store_true", help="全量输出，不做与上次的差异省略")
+    s.set_defaults(fn=cmd_snapshot)
     s = sub.add_parser("click")
     s.add_argument("--index", type=int); s.add_argument("--text"); s.add_argument("--selector")
     s.add_argument("--at", help="按视口坐标点击，形如 320,385；用于菜单项这类非标准可点元素")

@@ -1034,6 +1034,28 @@ def check_vocab(md: str, vocab_path, ui: set, has_evidence: bool):
     return probs, notes
 
 
+def collapse_probs(probs: list, keep: int = 5, threshold: int = 8) -> list:
+    """同一条规则的报错刷屏时折叠：只留前几条 + 一行汇总。
+
+    修复方式相同的报错，看 5 条和看 30 条给 agent 的信息量一样，
+    多出来的只是重复进上下文烧 token。按"去掉行号和「」内容后的模板"归组，
+    组内条数达到 threshold 才折叠，正常量级的报错原样全打。
+    """
+    tmpl = lambda p: re.sub(r"行[\d、]+", "行N", re.sub(r"「[^」]*」", "「…」", p))
+    groups: dict = {}
+    for p in probs:
+        groups.setdefault(tmpl(p), []).append(p)
+    out: list = []
+    for ps in groups.values():
+        if len(ps) >= threshold:
+            out += ps[:keep]
+            out.append(f"…同类问题共 {len(ps)} 处，其余 {len(ps) - keep} 处已折叠"
+                       f"（修复方式同上，修完重跑机检看剩余）")
+        else:
+            out += ps
+    return out
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
@@ -1063,7 +1085,7 @@ def main():
             print(f"  {n}")
     if probs:
         print(f"× 机检 {len(probs)} 处问题：")
-        for p in probs:
+        for p in collapse_probs(probs):
             print(f"  {p}")
         sys.exit(2)
     print("✓ 机检通过（格式 + 截图证据语义审计：界面原词、框↔正文、角标顺序、notes 点位）")
