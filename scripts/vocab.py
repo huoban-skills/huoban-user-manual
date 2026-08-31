@@ -13,7 +13,9 @@
   layout-<table_id>.json  表单布局，含字段名（facts 缺字段时兜底）
 
 产出 vocab.json：
-  {"tables": [...], "fields": [...], "options": [...]}
+  {"tables": [...], "fields": [...], "options": [...], "hac_names": [...]}
+  前三层是界面词（表名、字段名、选项值在界面上原样显示）；hac_names 是自动化等
+  配置的内部名称，界面上未必这么叫，只用于 render.py 拦「内部名当界面词」。
 """
 from __future__ import annotations
 
@@ -56,14 +58,17 @@ def main():
                 # 单选/多选的候选值也是读者在界面上看到的词
                 walk_names(f.get("options") or f.get("choices") or [], options)
 
-    # 自动化里的快捷按钮名（客户对账、收款录入这类）也是界面上的原名
-    buttons = set()
+    # 自动化里的名称（收款核销这类）是 hac 内部配置名，不是界面按钮的原词：
+    # 同一个动作界面上可能叫「核销应收」。这层单独落 hac_names，只用来在
+    # render.py 里拦「把内部名当界面词写进正文」，绝不并进界面词表当正确答案。
+    # 界面按钮的真相来源是 browser.py shot 落盘的 .meta.json。
+    hac_names = set()
     for au in base.glob("automation-*.json"):
         try:
-            walk_names(json.loads(au.read_text()), buttons)
+            walk_names(json.loads(au.read_text()), hac_names)
         except Exception:
             continue
-    options |= {b for b in buttons if len(b) <= 12}
+    hac_names = {b for b in hac_names if len(b) <= 12}
 
     # 表单布局兜底：facts 里没展开字段的表，从 layout 里补
     for lay in base.glob("layout-*.json"):
@@ -77,9 +82,11 @@ def main():
         "tables": sorted(tables),
         "fields": sorted(fields),
         "options": sorted(options),
+        "hac_names": sorted(hac_names),
     }
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
-    print(f"已写 {out}：表 {len(tables)}、字段 {len(fields)}、选项 {len(options)}")
+    print(f"已写 {out}：表 {len(tables)}、字段 {len(fields)}、选项 {len(options)}、"
+          f"hac 内部名 {len(hac_names)}（仅用于冲突拦截，不算界面词）")
 
 
 main()

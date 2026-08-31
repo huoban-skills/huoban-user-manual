@@ -10,8 +10,11 @@
 册名合规、总览图在册头、业务流程册必须有册头总览图、正文不用围栏代码块、
 常见问题格式、outline.md 存在、元信息变体、字段表列头、
 正文不用 HTML 标签、章开场句式（名词化定义、疑问代词排比、泛指「你」、主语堆叠）、官腔动词），
+再跑截图证据语义审计（每张 PNG 有 shot 落盘的 .meta.json、正文界面词有截图证据背书、
+hac 内部名不冒充界面词、框住的元素正文都提到、多框角标顺序＝正文顺序、
+notes.md 点位记到每张入册图），
 有问题逐条打印并以退出码 2 结束；
-机检规则见 check()。
+格式规则见 check()，证据规则见 check_evidence() / check_vocab()。
 
 Markdown 约定（与 writing-guide 一致，只认这些）：
   # 标题            册头/篇名；紧随其后的第一段渲染为导语，自动插目录
@@ -141,15 +144,154 @@ WORDY = ("进行", "实现", "予以", "加以", "用于")
 
 
 def load_vocab(path):
-    """读 vocab.py 产出的系统原词表，合并平台自带界面词。"""
+    """读 vocab.py 产出的系统原词表，合并平台自带界面词。
+
+    返回 (界面词集合, hac 内部名集合)。hac_names 是自动化等配置的内部名称，
+    界面上未必这么叫，绝不并进界面词集合——它只用来拦「内部名当界面词写进正文」。
+    """
     try:
         d = json.loads(Path(path).read_text())
     except Exception:
-        return None
+        return None, set()
     v = set(PLATFORM_UI)
     for k in ("tables", "fields", "options"):
         v |= {x.strip() for x in d.get(k, []) if isinstance(x, str)}
-    return v
+    hac = {x.strip() for x in d.get("hac_names", []) if isinstance(x, str)} - v
+    return v, hac
+
+
+def load_evidence(base: Path):
+    """读 browser.py shot 落盘的截图证据（images/*.meta.json）。
+
+    返回 (metas, ui)：metas 按图片文件名索引；ui 是所有证据里出现过的界面原文
+    （被框元素的文字 + 截图当时页面可见交互元素的文字），是「界面上真的这么写」
+    的机器记录，正文界面词审计以它为准。
+    """
+    metas, ui = {}, set()
+    img_dir = base / "images"
+    if img_dir.is_dir():
+        for p in sorted(img_dir.glob("*.meta.json")):
+            try:
+                m = json.loads(p.read_text())
+            except Exception:
+                continue
+            metas[p.name[: -len(".meta.json")]] = m
+            ui |= {t.strip() for t in m.get("ui_texts", [])
+                   if isinstance(t, str) and t.strip()}
+            for tg in m.get("targets", []):
+                t = (tg.get("ui_text") or "").strip()
+                if t:
+                    ui.add(t)
+    return metas, ui
+
+
+def check_evidence(md: str, base: Path, metas: dict) -> list:
+    """截图证据审计：逐图核对 .meta.json 与正文的一致性。
+
+    - 正文引用的每张 PNG 都要有证据文件（shot 自动落盘；没有 = 旧方式截的，重截）
+    - 图上框住的元素原文必须在本节正文出现（框 ↔ 正文一一对应）
+    - 多框的角标顺序要与正文提及顺序一致（角标顺序＝操作顺序）
+    - notes.md 点位清单要记到每张入册截图
+    """
+    probs: list = []
+    lines = md.splitlines()
+    # 切块：每个标题（#/##/###）到下一个标题算一节，图归它所在的节
+    sections = []          # (标题, 正文行列表, [(行号, src, alt)])
+    cur_title, cur_txt, cur_imgs = "", [], []
+
+    def flush():
+        nonlocal cur_title, cur_txt, cur_imgs
+        if cur_txt or cur_imgs:
+            sections.append((cur_title, cur_txt, cur_imgs))
+        cur_title, cur_txt, cur_imgs = "", [], []
+
+    in_code = False
+    for ln, raw in enumerate(lines, 1):
+        if raw.lstrip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        m = re.match(r"^(#{1,3})\s+(.*)$", raw)
+        if m:
+            flush()
+            cur_title = m.group(2).strip()
+            continue
+        im = IMG_RE.match(raw)
+        if im:
+            cur_imgs.append((ln, im.group(2), im.group(1)))
+            continue
+        if not raw.lstrip().startswith("<small"):
+            cur_txt.append((ln, raw))
+    flush()
+
+    # 新增类按钮名逐表不同（这张表是「添加数据」，那张表是「创建」），全局白名单
+    # 分不出来；只要本节有截图证据，就要求正文写的新增按钮出现在本节证据里。
+    NEW_BTNS = ("添加数据", "创建新数据", "创建", "新建")
+    referenced: list = []
+    for title, txt, imgs in sections:
+        body = re.sub(r"\s+", "", "\n".join(raw for _, raw in txt))
+        sec_ui: set = set()
+        for _, src, _ in imgs:
+            m = metas.get(Path(src).name)
+            if m:
+                sec_ui |= {t for t in m.get("ui_texts", []) if isinstance(t, str)}
+                sec_ui |= {(tg.get("ui_text") or "").strip() for tg in m.get("targets", [])}
+        if sec_ui:
+            for ln, raw in txt:
+                for mm in re.finditer(r"点[击开]?「(%s)」" % "|".join(NEW_BTNS), raw):
+                    w = mm.group(1)
+                    if w in sec_ui:
+                        continue
+                    actual = [b for b in NEW_BTNS if b != w and b in sec_ui]
+                    probs.append(f"行{ln}: 正文写点「{w}」，但本节截图证据里的界面上没有这个按钮"
+                                 + (f"（证据里是「{actual[0]}」）" if actual else "")
+                                 + "；不同表的新增按钮名不同，以本节截图当时的界面原词为准")
+        for ln, src, alt in imgs:
+            name = Path(src).name
+            if src.lower().endswith(".png") and src.startswith("images/"):
+                referenced.append(name)
+            meta = metas.get(name)
+            if meta is None:
+                if metas and src.lower().endswith(".png") and src.startswith("images/"):
+                    probs.append(f"行{ln}: 图「{name}」没有同名 .meta.json 证据文件，"
+                                 f"界面原文没有留底；用 scripts/browser.py shot 重截"
+                                 f"（不要手写证据文件，它是机器记录）")
+                continue
+            # 只核按钮/字段量级的短文字；大区域框的 innerText 是整块内容，不参与比对
+            tgs = [(t.get("order", i + 1), (t.get("ui_text") or "").strip())
+                   for i, t in enumerate(meta.get("targets", []))]
+            tgs = [(o, w) for o, w in tgs if 1 <= len(w) <= 12]
+            found = [(o, w, body.find(w)) for o, w in tgs]
+            for o, w, p in found:
+                if p < 0:
+                    probs.append(f"行{ln}: 图「{name}」框住了「{w}」，但本节正文没提到它；"
+                                 f"框 ↔ 正文要一一对应：正文写清这一步怎么用它，或者别框它")
+            seq = sorted([(o, w, p) for o, w, p in found if p >= 0])
+            if len(seq) >= 2 and any(seq[i][2] > seq[i + 1][2] for i in range(len(seq) - 1)):
+                probs.append(f"行{ln}: 图「{name}」的角标顺序和正文顺序对不上"
+                             f"（图上依次是 {' → '.join(w for _, w, _ in seq)}，正文提及顺序不同）；"
+                             f"角标顺序＝操作顺序，按正文步骤顺序重排 --highlight 的选择器重截")
+
+    if referenced and not metas:
+        probs.append("images/ 下没有任何 .meta.json 截图证据：正文写的按钮名、字段名无从核对。"
+                     "所有配图用 scripts/browser.py shot 重截即可自动补齐"
+                     "（旧方式截的图没有界面原文留底，重渲染停在这里是预期行为）")
+
+    if referenced:
+        notes_p = base / "notes.md"
+        notes = notes_p.read_text(encoding="utf-8", errors="ignore") if notes_p.exists() else ""
+        if not notes:
+            probs.append("产出目录缺 notes.md：点位清单没有留痕，走查可能被跳过"
+                         "（格式见 walkthrough-guide 第七节）")
+        else:
+            miss = [n for n in dict.fromkeys(referenced) if n not in notes]
+            if miss:
+                probs.append(f"notes.md 的点位清单没记这 {len(miss)} 张入册截图："
+                             f"{'、'.join(miss[:6])}{' 等' if len(miss) > 6 else ''}；"
+                             f"每张图都要有点位条目（页面、按钮原文、点击结果、截图名，"
+                             f"见 walkthrough-guide 第七节），打勾不算记录")
+    return probs
 
 
 CN_NUM = "零一二三四五六七八九"
@@ -841,18 +983,24 @@ def render(md: str, base: Path) -> str:
 
 
 
-def check_vocab(md: str, vocab_path) -> list:
-    """核对正文里当界面元素用的「X」是不是系统原词（vocab.py 产出的词表）。
+def check_vocab(md: str, vocab_path, ui: set, has_evidence: bool):
+    """核对正文里当界面元素用的「X」是不是系统原词。
 
-    只查语境明确的：填「X」/选「X」/点「X」/「X」必填/「X」会变空。
-    举例值、业务说法不在此列，不查。
+    返回 (硬错误列表, 待人工核清单)。事实来源分两层：
+    - 界面层：截图证据里的原文（ui）+ 表/字段/选项词表 + 平台自带词——命中即通过
+    - hac 层：自动化等配置的内部名（hac_names）——点击语境里命中它而界面层没有，
+      是「把内部名当界面词」（实测踩过：配置叫「收款核销」，界面按钮是「核销应收」），
+      直接报错，不给人工放行的余地
+    只查语境明确的：填「X」/选「X」/点「X」/「X」必填/「X」会变空。举例值不查。
     """
     if not vocab_path:
-        return ["界面名词校验没跑：未传 --vocab <vocab.json>，「」里的字段名是否生造无人核对"]
-    vocab = load_vocab(vocab_path)
+        return [], ["界面名词校验没跑：未传 --vocab <vocab.json>，「」里的字段名是否生造无人核对"]
+    vocab, hac_names = load_vocab(vocab_path)
     if vocab is None:
-        return [f"界面名词校验没跑：读不到词表 {vocab_path}"]
-    probs, seen = [], set()
+        return [], [f"界面名词校验没跑：读不到词表 {vocab_path}"]
+    allow = vocab | ui
+    probs, notes, seen = [], [], set()
+    click_pat = re.compile(r"[点勾]开?[击选]?「([^」]{1,20})」")
     pats = [
         r"[填选点勾]开?[击选]?「([^」]{1,20})」",
         r"「([^」]{1,20})」(?=必填|是必填|会变空|自动生成|不用填)",
@@ -864,15 +1012,26 @@ def check_vocab(md: str, vocab_path) -> list:
             continue
         if in_code or line.lstrip().startswith("<small"):
             continue
+        clicks = {m.group(1).strip() for m in click_pat.finditer(line)}
         for pat in pats:
             for m in re.finditer(pat, line):
                 w = m.group(1).strip()
-                if w in vocab or w in seen:
+                if w in allow or w in seen:
                     continue
                 seen.add(w)
-                probs.append(f"行{ln}: 「{w}」不在系统原词表里 → 是举例值就放着，"
-                             f"是字段/按钮名就核对界面改成原名")
-    return probs
+                if w in hac_names:
+                    probs.append(f"行{ln}: 「{w}」是 hac 配置里的内部名称，没有出现在任何"
+                                 f"截图证据和界面词表里；界面上未必叫这个名"
+                                 f"（配置名≠按钮名），用 browser.py snapshot/eval 取界面原词改写；"
+                                 f"若界面确实显示「{w}」，把它框进这一步的截图即可通过")
+                elif w in clicks and has_evidence:
+                    probs.append(f"行{ln}: 正文让读者点「{w}」，但它没有出现在任何截图证据里；"
+                                 f"读者要点的东西必须在图里框出来——把这一步的按钮框进截图重截，"
+                                 f"或核对界面改成原词")
+                else:
+                    notes.append(f"行{ln}: 「{w}」不在系统原词表和截图证据里 → 是举例值就放着，"
+                                 f"是字段/按钮名就核对界面改成原名")
+    return probs, notes
 
 
 def main():
@@ -891,8 +1050,11 @@ def main():
     md = src.read_text(encoding="utf-8")
     dst.write_text(render(md, src.parent), encoding="utf-8")
     print(f"已渲染：{dst}")
+    metas, ui = load_evidence(src.parent)
     probs = check(md, src.parent)
-    vocab_notes = check_vocab(md, vocab_path)
+    probs += check_evidence(md, src.parent, metas)
+    hard, vocab_notes = check_vocab(md, vocab_path, ui, bool(metas))
+    probs += hard
     if not (src.parent / "outline.md").exists():
         probs.append("产出目录缺 outline.md：骨架（表、页面、章节、数据口径）没有留痕，阶段一可能被跳过")
     if vocab_notes:
@@ -900,11 +1062,11 @@ def main():
         for n in vocab_notes:
             print(f"  {n}")
     if probs:
-        print(f"× 格式机检 {len(probs)} 处问题：")
+        print(f"× 机检 {len(probs)} 处问题：")
         for p in probs:
             print(f"  {p}")
         sys.exit(2)
-    print("✓ 格式机检通过（章序号、小节编号、图号图注、步骤序号）")
+    print("✓ 机检通过（格式 + 截图证据语义审计：界面原词、框↔正文、角标顺序、notes 点位）")
 
 
 if __name__ == "__main__":

@@ -402,27 +402,49 @@ def cmd_wait(args):
 # 用浮层画框，不改元素自身样式：outline 会被祖先的 overflow:hidden 裁掉。
 # 多个框时按选择器传入顺序在框左上角标序号角标（传入顺序=步骤顺序）；单框不标。
 # 序号的含义写在文档步骤文字里，不写进图内。
+# 只命中当前可见的元素：页面切换后残留的隐藏节点（如上一页的 .ag-root）、
+# 视口外的元素一律跳过；AG Grid 底部固定统计行（.ag-floating-bottom）不参与框选，
+# 整表框选时数据区下边界收到统计行上沿。
+# 返回命中清单 [{text, rect}]，shot 把它写进截图证据元数据（.meta.json）。
 HIGHLIGHT_ON = """
 (sels) => {
+  const items = [];
+  const seen = new Set();
+  sels.forEach(s => document.querySelectorAll(s).forEach(el => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') return;
+    if (el.checkVisibility && !el.checkVisibility()) return;
+    if (el.closest('.ag-floating-bottom')) return;
+    let bottom = r.bottom;
+    const fb = el.querySelector('.ag-floating-bottom');
+    if (fb) {
+      const fr = fb.getBoundingClientRect();
+      if (fr.height > 2 && fr.top > r.top + 20) bottom = Math.min(bottom, fr.top);
+    }
+    let text = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
+    if (text.length > 60) text = text.slice(0, 60);
+    items.push({text, rect: [Math.round(r.left), Math.round(r.top),
+                             Math.round(r.right - r.left), Math.round(bottom - r.top)]});
+  }));
   const box = document.createElement('div');
   box.id = '__hbHl';
   box.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647';
-  const rects = [];
-  sels.forEach(s => document.querySelectorAll(s).forEach(el => {
-    const r = el.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
-    rects.push(r);
-  }));
-  rects.forEach((r, i) => {
-    // 柔和描边样式：珊瑚色圆角框 + 白色外圈 + 轻投影
+  items.forEach((it, i) => {
+    const [x, y, w, h] = it.rect;
+    // 柔和描边样式：珊瑚色圆角框
     const m = document.createElement('div');
-    m.style.cssText = `position:absolute;left:${r.left - 5}px;top:${r.top - 5}px;` +
-      `width:${r.width + 10}px;height:${r.height + 10}px;` +
+    m.style.cssText = `position:absolute;left:${x - 5}px;top:${y - 5}px;` +
+      `width:${w + 10}px;height:${h + 10}px;` +
       'border:2px solid #D97757;border-radius:8px;box-sizing:border-box';
     box.appendChild(m);
-    if (rects.length > 1) {
+    if (items.length > 1) {
       const b = document.createElement('div');
-      b.style.cssText = `position:absolute;left:${Math.max(2, r.left - 15)}px;top:${Math.max(2, r.top - 15)}px;` +
+      b.style.cssText = `position:absolute;left:${Math.max(2, x - 15)}px;top:${Math.max(2, y - 15)}px;` +
         'width:20px;height:20px;border-radius:50%;background:#D97757;color:#fff;' +
         'display:flex;align-items:center;justify-content:center;' +
         'font:bold 13px -apple-system,sans-serif';
@@ -431,6 +453,7 @@ HIGHLIGHT_ON = """
     }
   });
   document.body.appendChild(box);
+  return items;
 }
 """
 HIGHLIGHT_OFF = "() => { const b = document.getElementById('__hbHl'); if (b) b.remove(); }"
@@ -508,8 +531,11 @@ def cmd_shot(args):
         if masks:
             page.evaluate(MASK_ON, masks)
         sels = [s for s in (args.highlight or "").split(",,") if s]
+        targets = []
         if sels:
-            page.evaluate(HIGHLIGHT_ON, sels)
+            targets = page.evaluate(HIGHLIGHT_ON, sels) or []
+            if not targets:
+                print("⚠ --highlight 选择器没有命中任何可见元素，这张图不会有框")
         if blurs or masks or sels:
             page.wait_for_timeout(200)
         path = Path(args.path)
@@ -524,7 +550,29 @@ def cmd_shot(args):
             page.evaluate(MASK_OFF)
         if blurs:
             page.evaluate(BLUR_OFF)
+        # 证据元数据：截图当时的 URL、被框元素的界面原文、页面可见交互元素原文，
+        # 落成同名 .meta.json。render.py 语义审计拿它核正文界面词，是机器记录，不许手编。
+        try:
+            ui_texts = sorted({el["text"] for el in page.evaluate(ENUM_JS)
+                               if el.get("text") and len(el["text"]) <= 30})
+        except Exception:
+            ui_texts = []
+        meta = {
+            "url": page.url,
+            "title": page.title(),
+            "viewport": page.evaluate("[innerWidth, innerHeight]"),
+            "targets": [{"order": i + 1, "ui_text": t["text"], "rect": t["rect"]}
+                        for i, t in enumerate(targets)],
+            "ui_texts": ui_texts,
+        }
+        Path(str(path) + ".meta.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=1))
         print(f"已截图：{path}（{path.stat().st_size // 1024} KB）")
+        if targets:
+            nums = "①②③④⑤⑥⑦⑧⑨"
+            print("框中元素（按序号）：" + "、".join(
+                (nums[i] if i < 9 else f"[{i + 1}]") + (t["text"][:20] or "<无文字>")
+                for i, t in enumerate(targets)))
     run(fn)
 
 
