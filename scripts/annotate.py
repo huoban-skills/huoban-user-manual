@@ -31,16 +31,21 @@ MASK = "#DDDDDD"
 
 
 def _font(size):
-    for cand in (
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ):
+    if sys.platform == "win32":
+        fonts = os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts")
+        candidates = [os.path.join(fonts, name) for name in ("arialbd.ttf", "segoeuib.ttf")]
+    elif sys.platform == "darwin":
+        candidates = ["/System/Library/Fonts/Helvetica.ttc",
+                      "/System/Library/Fonts/Supplemental/Arial.ttf"]
+    else:
+        candidates = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                      "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"]
+    for cand in candidates:
         try:
             return ImageFont.truetype(cand, size)
         except Exception:
             continue
-    return ImageFont.load_default()
+    return ImageFont.load_default(size=size)
 
 
 def _stem(path):
@@ -78,7 +83,7 @@ def grid(path, crop):
         d.text((3, y + 2), str(i * 5), fill="#D06000")
     out = _stem(path) + ".grid.png"
     im.save(out)
-    with open(_stem(path) + ".grid.json", "w") as f:
+    with open(_stem(path) + ".grid.json", "w", encoding="utf-8") as f:
         json.dump({"crop": crop}, f)
     return out
 
@@ -158,7 +163,7 @@ def check_measured(path, crop):
             + (f" --crop {crop[0]:g},{crop[1]:g}" if crop else "")
             + " --grid\n  从网格图上读出坐标，再回来画。"
         )
-    with open(meta) as f:
+    with open(meta, encoding="utf-8") as f:
         measured = json.load(f).get("crop")
     if (measured or None) != (list(crop) if crop else None):
         sys.exit(
@@ -173,6 +178,10 @@ def _nums(v):
 
 
 if __name__ == "__main__":
+    # Windows redirected output may otherwise use a legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = sys.argv[1:]
     if not args:
         sys.exit(__doc__)

@@ -156,7 +156,7 @@ def load_vocab(path):
     界面上未必这么叫，绝不并进界面词集合——它只用来拦「内部名当界面词写进正文」。
     """
     try:
-        d = json.loads(Path(path).read_text())
+        d = json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception:
         return None, set()
     v = set(PLATFORM_UI)
@@ -178,7 +178,7 @@ def load_evidence(base: Path):
     if img_dir.is_dir():
         for p in sorted(img_dir.glob("*.meta.json")):
             try:
-                m = json.loads(p.read_text())
+                m = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 continue
             metas[p.name[: -len(".meta.json")]] = m
@@ -1221,4 +1221,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows redirected output may otherwise use a legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     main()

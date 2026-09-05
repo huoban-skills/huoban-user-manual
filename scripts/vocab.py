@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 
@@ -48,7 +49,7 @@ def main():
 
     facts = base / "facts.json"
     if facts.exists():
-        d = json.loads(facts.read_text())
+        d = json.loads(facts.read_text(encoding="utf-8"))
         for t in d.get("tables", []):
             if t.get("name"):
                 tables.add(t["name"].strip())
@@ -65,7 +66,7 @@ def main():
     hac_names = set()
     for au in base.glob("automation-*.json"):
         try:
-            walk_names(json.loads(au.read_text()), hac_names)
+            walk_names(json.loads(au.read_text(encoding="utf-8")), hac_names)
         except Exception:
             continue
     hac_names = {b for b in hac_names if len(b) <= 12}
@@ -73,7 +74,7 @@ def main():
     # 表单布局兜底：facts 里没展开字段的表，从 layout 里补
     for lay in base.glob("layout-*.json"):
         try:
-            walk_names(json.loads(lay.read_text()), fields)
+            walk_names(json.loads(lay.read_text(encoding="utf-8")), fields)
         except Exception:
             continue
 
@@ -84,9 +85,14 @@ def main():
         "options": sorted(options),
         "hac_names": sorted(hac_names),
     }
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"已写 {out}：表 {len(tables)}、字段 {len(fields)}、选项 {len(options)}、"
           f"hac 内部名 {len(hac_names)}（仅用于冲突拦截，不算界面词）")
 
 
-main()
+if __name__ == "__main__":
+    # Windows redirected output may otherwise use a legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+    main()

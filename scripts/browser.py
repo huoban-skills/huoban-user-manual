@@ -156,7 +156,7 @@ def fit_window_to_screen():
 
 def cmd_keeper(args):
     """常驻子进程：托管浏览器生命周期，浏览器关闭后自动退出。"""
-    log = open(PROFILE / "keeper.log", "w")
+    log = open(PROFILE / "keeper.log", "w", encoding="utf-8")
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as p:
@@ -180,7 +180,7 @@ def cmd_keeper(args):
 
 def read_state() -> dict:
     try:
-        return json.loads(STATE.read_text())
+        return json.loads(STATE.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -284,7 +284,7 @@ def run(fn):
             state["url"] = page.url
         except Exception:
             pass
-        STATE.write_text(json.dumps(state))
+        STATE.write_text(json.dumps(state), encoding="utf-8")
     finally:
         p.stop()
 
@@ -300,7 +300,7 @@ def cmd_status(args):
 def cmd_page(args):
     state = read_state()
     state["page"] = args.index
-    STATE.write_text(json.dumps(state))
+    STATE.write_text(json.dumps(state), encoding="utf-8")
     cmd_status(args)
 
 
@@ -366,13 +366,13 @@ def cmd_snapshot(args):
         last = {}
         if not args.full:
             try:
-                last = json.loads(last_p.read_text())
+                last = json.loads(last_p.read_text(encoding="utf-8"))
             except Exception:
                 last = {}
         body, state = snapshot_diff(text, els, last, args.max_chars)
         print(body)
         try:
-            last_p.write_text(json.dumps(state, ensure_ascii=False))
+            last_p.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass
     run(fn)
@@ -500,7 +500,7 @@ HIGHLIGHT_ON = """
       b.style.cssText = `position:absolute;left:${Math.max(2, x - 15)}px;top:${Math.max(2, y - 15)}px;` +
         'width:20px;height:20px;border-radius:50%;background:#D97757;color:#fff;' +
         'display:flex;align-items:center;justify-content:center;' +
-        'font:bold 13px -apple-system,sans-serif';
+        'font:bold 13px system-ui,-apple-system,sans-serif';
       b.textContent = String(i + 1);
       box.appendChild(b);
     }
@@ -554,6 +554,18 @@ BLUR_ON = """
 BLUR_OFF = "() => { const b = document.getElementById('__hbBlur'); if (b) b.remove(); }"
 
 
+def screenshot_geometry(data, viewport, kind):
+    """Record actual PNG pixels; only viewport shots map directly to click coordinates."""
+    from io import BytesIO
+    from PIL import Image
+    with Image.open(BytesIO(data)) as im:
+        pixels = list(im.size)
+    geometry = {"kind": kind, "pixels": pixels}
+    if kind == "viewport":
+        geometry["css_to_image_scale"] = [pixels[0] / viewport[0], pixels[1] / viewport[1]]
+    return geometry
+
+
 def cmd_shot(args):
     def fn(page, pages):
         try:
@@ -594,9 +606,9 @@ def cmd_shot(args):
         path = Path(args.path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if args.selector:
-            page.locator(args.selector).first.screenshot(path=str(path), timeout=8000)
+            shot_data = page.locator(args.selector).first.screenshot(path=str(path), timeout=8000)
         else:
-            page.screenshot(path=str(path), full_page=args.full_page)
+            shot_data = page.screenshot(path=str(path), full_page=args.full_page)
         if sels:
             page.evaluate(HIGHLIGHT_OFF)
         if masks:
@@ -610,17 +622,24 @@ def cmd_shot(args):
                                if el.get("text") and len(el["text"]) <= 30})
         except Exception:
             ui_texts = []
+        viewport = page.evaluate("[innerWidth, innerHeight]")
+        kind = "element" if args.selector else ("full_page" if args.full_page else "viewport")
+        geometry = screenshot_geometry(shot_data, viewport, kind)
         meta = {
+            "screenshot": geometry,
             "url": page.url,
             "title": page.title(),
-            "viewport": page.evaluate("[innerWidth, innerHeight]"),
+            "viewport": viewport,
             "targets": [{"order": i + 1, "ui_text": t["text"], "rect": t["rect"]}
                         for i, t in enumerate(targets)],
             "ui_texts": ui_texts,
         }
         Path(str(path) + ".meta.json").write_text(
-            json.dumps(meta, ensure_ascii=False, indent=1))
+            json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"已截图：{path}（{path.stat().st_size // 1024} KB）")
+        if kind == "viewport":
+            sx, sy = geometry["css_to_image_scale"]
+            print(f"截图原图坐标 → click --at：x 除以 {sx:g}，y 除以 {sy:g}（缩略图先还原到原图）")
         if targets:
             nums = "①②③④⑤⑥⑦⑧⑨"
             print("框中元素（按序号）：" + "、".join(
@@ -689,4 +708,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows redirected output may otherwise use a legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     main()

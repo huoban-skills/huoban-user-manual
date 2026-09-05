@@ -71,7 +71,7 @@ python3 scripts/browser.py shot --path images/2-1-新建订单表单.png
   browser.py eval --js "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='确定');const r=b.getBoundingClientRect();return Math.round(r.x+r.width/2)+','+Math.round(r.y+r.height/2)})()"
   ```
 - **控制台类 SPA（阿里云、腾讯云等）才退回「截图量位置」。** 这类页面 class 是随机哈希、元素文本也常取不到，`--text` / `--index` / `getBoundingClientRect` 都不好使，只能先 `shot` 存盘、读回来看、从图上量。
-- **从截图量坐标要除以 2**：截图是 2 倍图（如 2880×1600），`click --at` 收的是 CSS 像素（1440×800）。中间再夹一个缩略图尺寸更容易算错，量完先换算再点。（`getBoundingClientRect` 拿的已经是 CSS 像素，不用除。）
+- **从截图量坐标按实际比例换算，不固定除以 2**：先用普通 `shot` 截当前视口（不带 `--selector` / `--full-page`）。命令回显及 `.png.meta.json` 的 `screenshot.css_to_image_scale` 会给出横、纵缩放比例 `[sx, sy]`，`click --at` 坐标为原图的 `x / sx, y / sy`。Windows 的显示缩放和视口兜底可能使比例不同；若看到的是缩略图，先按原图尺寸 `screenshot.pixels` 还原位置。截图后若页面滚动、布局或视口改变，重新取坐标。`getBoundingClientRect` 返回的已经是 CSS 像素，不换算。局部图、整页长图以及经 annotate 裁剪的图不能直接这样换算，改用 DOM 坐标或重新截当前视口；旧截图没有比例信息时也重新截。
 - **明细里的数字别用 `type` 输入**：ag-grid 的编辑器会吞字符（打 `9999` 只进 `99`），回车还会顺手新建一行。用 `fill --selector`，或者输入完点表单空白处提交而不是按回车。
 
 ## 三、每个页面都要看全
@@ -101,7 +101,7 @@ python3 scripts/browser.py shot --path <scratch>/probe-bottom.png
 
 ## 四、截图一致性
 
-- **窗口尺寸不用管**：驱动脚本每条命令自动把窗口铺满它所在的屏幕（换屏拖过去即可）；视口小于 1440×800 时才用 CDP 放大兜底。固定尺寸用 `HB_WIN=2560x1440 python3 scripts/browser.py start` 指定。
+- **窗口尺寸不用管**：驱动脚本每条命令自动把窗口铺满它所在的屏幕（换屏拖过去即可）；视口小于 1440×800 时才用 CDP 放大兜底。固定尺寸设置 `HB_WIN=2560x1440`；PowerShell 用 `$env:HB_WIN="2560x1440"`，再运行 `python scripts/browser.py start`，后续命令保持同一环境变量。
 - 判断截图够不够大看 `eval --js "[innerWidth,innerHeight]"`，不看窗口外观。
 - 不开开发者工具，同一册截图用同一尺寸。
 - 同一章的截图在同一次走查里完成，避免界面前后状态不一致。

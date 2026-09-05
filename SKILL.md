@@ -7,7 +7,7 @@ description: >
 metadata:
   requires:
     bins: ["hac", "python3"]
-    pips: ["pillow", "playwright"]   # pillow 缺了标注框机检会整项跑不了；playwright 缺了走查开不了浏览器
+    pips: ["pillow>=10.1", "playwright"]   # pillow 缺了标注框机检会整项跑不了；playwright 缺了走查开不了浏览器
 ---
 
 # 伙伴云图文手册生成
@@ -76,6 +76,7 @@ metadata:
 
 ### 阶段〇：环境准备
 
+0. Windows 中若 `python3` 不可用，示例命令改用已安装依赖的 `python` 或 `py`。画框依赖 `Pillow>=10.1`；脚本的文本文件和输出统一为 UTF-8。
 1. 验证 hac 可用：`hac table list-tables --space-id <space_id>` 试跑。
 2. 启动走查浏览器：`python3 scripts/browser.py start`。首次使用或会话失效，让用户在弹出窗口里自行登录；登录态存在持久化 profile（`~/.hb-manual-profile`）。涉及外部平台控制台同理，`start --url <控制台地址>` 后让用户在**这个窗口**里登录。
 3. 切到目标工作区并核对：先用 `hac space` 域命令按 space_id 查出工作区名，再在浏览器里切过去，`browser.py snapshot` 核对页面上的工作区名对得上。对不上就是进错了区，切对再继续。

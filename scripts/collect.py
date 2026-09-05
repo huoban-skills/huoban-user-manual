@@ -41,9 +41,9 @@ def hac(*args: str) -> dict:
     with tempfile.TemporaryDirectory() as d:
         out_path, err_path = Path(d) / "out.json", Path(d) / "err.txt"
         with open(out_path, "w") as out, open(err_path, "w") as err:
-            code = subprocess.run(["hac", *args], stdout=out, stderr=err).returncode
-        stdout, stderr = out_path.read_text(), err_path.read_text()
-    if code != 0 or not stdout.strip():
+            code = subprocess.run([__import__("shutil").which("hac") or "hac", *args], stdout=out, stderr=err).returncode
+        stdout, stderr = out_path.read_text(encoding="utf-8", errors="replace"), err_path.read_text(encoding="utf-8", errors="replace")
+    if not stdout.strip() or (code != 0 and "UV_HANDLE_CLOSING" not in stderr):
         sys.exit(f"× hac {' '.join(args)} 失败：{stderr.strip()[:400]}")
     try:
         return json.loads(stdout)
