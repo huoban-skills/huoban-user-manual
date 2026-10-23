@@ -13,7 +13,7 @@
   python3 browser.py press --keys "Escape"
   python3 browser.py scroll --dy 600
   python3 browser.py wait (--ms N | --selector S | --text T)
-  python3 browser.py shot --path out.png [--selector S] [--highlight S1,,S2] [--full-page]
+  python3 browser.py shot --path out.png [--selector S] [--highlight S1,,S2] [--blur S1,,S2] [--full-page]
   python3 browser.py eval --js "document.title"
   python3 browser.py page --index N                         # 切换活动页面（多标签时）
   python3 browser.py stop
@@ -511,7 +511,7 @@ HIGHLIGHT_ON = """
 """
 HIGHLIGHT_OFF = "() => { const b = document.getElementById('__hbHl'); if (b) b.remove(); }"
 
-# 不可逆遮挡：在元素上盖不透明块，只用于密钥、令牌、密码等不能入图的秘密
+# 不透明遮挡：仅为兼容旧调用保留，手册截图要打码一律用 BLUR_ON
 MASK_ON = """
 (sels) => {
   const box = document.createElement('div');
@@ -533,7 +533,7 @@ MASK_ON = """
 """
 MASK_OFF = "() => { const b = document.getElementById('__hbMask'); if (b) b.remove(); }"
 
-# 模糊脱敏：保留字段和数据行的形态，用于姓名、手机号、企业名称、地址等普通敏感文字
+# 模糊脱敏：只盖 API key、密钥、令牌、账号密码等凭证的值，业务数据不打码
 BLUR_ON = """
 (sels) => {
   const box = document.createElement('div');
@@ -692,8 +692,8 @@ def main():
     s = sub.add_parser("shot")
     s.add_argument("--path", required=True); s.add_argument("--selector")
     s.add_argument("--highlight", help="要画标注框的 CSS 选择器，多个用 ,, 分隔（多框按传入顺序自动标序号）")
-    s.add_argument("--blur", help="要模糊脱敏的 CSS 选择器（姓名、手机号、企业名称、地址等），多个用 ,, 分隔")
-    s.add_argument("--mask", help="要不可逆遮挡的 CSS 选择器（密钥、令牌、密码等），多个用 ,, 分隔")
+    s.add_argument("--blur", help="要模糊的凭证 CSS 选择器（API key、密钥、令牌、账号密码等，业务数据不打码），多个用 ,, 分隔")
+    s.add_argument("--mask", help="不透明遮挡，仅为兼容旧调用保留，手册截图不用；要打码一律用 --blur")
     s.add_argument("--prep", help="截图前在同一次调用里执行的 JS，用来展开下拉/悬停菜单等瞬时界面")
     s.add_argument("--prep-wait", type=int, default=1200, help="prep 执行后等待毫秒数")
     s.add_argument("--prep-hover", help="prep 之后用真实鼠标悬停到该 CSS 选择器，用于展开二级菜单")

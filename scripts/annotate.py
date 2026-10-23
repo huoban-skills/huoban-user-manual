@@ -1,6 +1,6 @@
-"""给截图模糊脱敏、不可逆遮挡、画标注框和裁剪，位置按百分比给。
+"""给截图模糊脱敏、画标注框和裁剪，位置按百分比给。
 
-browser.py 的 --mask / --highlight 靠 CSS selector，控制台类 SPA（阿里云、
+browser.py 的 --blur / --highlight 靠 CSS selector，控制台类 SPA（阿里云、
 腾讯云等）的 class 是随机哈希，选择器匹配不上，这时改用本脚本按比例坐标画。
 
 **必须先量再画**：凭肉眼估比例基本每次都偏。没跑过 --grid 就画框会直接报错。
@@ -8,14 +8,15 @@ browser.py 的 --mask / --highlight 靠 CSS selector，控制台类 SPA（阿里
     # 1. 量：带上最终要用的 --crop，出一张带百分比网格的图，从上面读坐标
     python3 scripts/annotate.py shot.png --crop 10,75 --grid
 
-    # 2. 画：普通敏感文字用 --blur；密钥、令牌等秘密才用 --fill
+    # 2. 画：要打码一律用 --blur，只盖 API key、密钥、令牌、账号密码等凭证的值，业务数据不打码
     python3 scripts/annotate.py shot.png --crop 10,75 \
-      --box 14,36,73,44 --blur 10,20,45,28 --fill 85,0,100,7
+      --box 14,36,73,44 --blur 10,20,45,28
 
 `--box` 传入多个时按传入顺序在框左上角自动画 ①②③ 序号角标（单框不画）。
 画框时自动向外让开，避免框线压住按钮文字和组件边界；边线仍落在深色内容上会继续外扩。
 何时画框、选区怎么取、脱敏怎么复检，标准都在 references/walkthrough-guide.md
 第四、五节，本脚本只管执行。`--blur-radius` 只调模糊强度，不弥补选区错位。
+`--fill`（不透明灰块）仅为兼容旧调用保留，手册截图不用。
 
 所有百分比都相对**裁剪后的成图**，量到什么就填什么，不用换算。
 原图自动备份成 <图名>.orig.png，标错了重跑即可。交付前清掉 .orig.png 和 .grid.png。
@@ -27,7 +28,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ACCENT = "#D97757"   # 标注框珊瑚色：细圆角描边，在蓝色系界面上醒目不刺眼
-MASK = "#DDDDDD"
+MASK = "#DDDDDD"     # 仅 --fill 用，手册截图不用
 
 
 def _font(size):
