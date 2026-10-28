@@ -6,7 +6,8 @@
 
 用例覆盖 v1.5 ~ v1.7 实测踩过的坑：hac 内部名冒充界面词、新增按钮逐表不同、
 角标顺序、证据缺失、带空格词匹配、操作列编造、开场句式模板、覆盖度门禁
-（骨架小节、基线对照、FAQ 空壳）、元信息变体、snapshot 差异输出、报错折叠。
+（骨架小节、基线对照、FAQ 空壳）、元信息变体、snapshot 差异输出、报错折叠、
+标注框按文字定位。
 新增机检规则时在这里补用例；跑不绿不许提交。
 """
 from __future__ import annotations
@@ -211,6 +212,30 @@ def main():
        "snapshot 差异输出：首次全量、之后只报变化", out2)
     out3, _ = b.snapshot_diff(nav + "\n付款单\n核销应付", els2, st2, 4000)
     ok("完全相同" in out3, "同页重复 snapshot → 完全相同")
+
+    print("【标注框按文字定位】")
+    from playwright.sync_api import sync_playwright
+    page_html = """<body style="margin:0">
+      <div class="_bar_x9" style="position:absolute;left:10px;top:10px;width:72px;height:32px"><span>筛选</span></div>
+      <div style="display:none"><b>筛选</b></div>
+      <div class="_btn_a1" style="position:absolute;left:10px;top:300px;width:54px;height:24px"><i>发货</i></div>
+      <div class="_btn_a1" style="position:absolute;left:10px;top:100px;width:54px;height:24px"><i>发货</i></div>
+      <div class="_btn_a1" style="position:absolute;left:10px;top:200px;width:54px;height:24px"><i>发货</i></div>
+    </body>"""
+    with sync_playwright() as pw:
+        br = pw.chromium.launch()
+        pg = br.new_page(viewport={"width": 800, "height": 600})
+        pg.set_content(page_html)
+        hits = pg.evaluate(b.HIGHLIGHT_ON, ["text=筛选"])
+        ok([h["rect"] for h in hits] == [[10, 10, 72, 32]],
+           "text= 命中按钮本身，不命中里面的 span，也不命中隐藏的同名元素", str(hits))
+        pg.evaluate(b.HIGHLIGHT_OFF)
+        hits = pg.evaluate(b.HIGHLIGHT_ON, ["text=发货"])
+        ok([h["rect"][1] for h in hits] == [100, 200, 300], "同名多处按屏幕从上到下排，不按 DOM 顺序", str(hits))
+        pg.evaluate(b.HIGHLIGHT_OFF)
+        hits = pg.evaluate(b.HIGHLIGHT_ON, ["text=发货|2", "text=筛选"])
+        ok([h["rect"][1] for h in hits] == [200, 10], "text=原文|序号 取屏幕上第几个，多个目标按传入顺序", str(hits))
+        br.close()
 
     print(f"\n✓ 全部 {PASS} 项通过")
 

@@ -1,7 +1,7 @@
 """给截图模糊脱敏、画标注框和裁剪，位置按百分比给。
 
-browser.py 的 --blur / --highlight 靠 CSS selector，控制台类 SPA（阿里云、
-腾讯云等）的 class 是随机哈希，选择器匹配不上，这时改用本脚本按比例坐标画。
+画框先用 browser.py 的 --highlight（CSS 选择器或 text=界面原文），本脚本只在两种情况下用：
+目标不是页面元素（canvas 图表、跨域 iframe、图片里的内容），或要打码而 --blur 的 CSS 选择器写不出来。
 
 **必须先量再画**：凭肉眼估比例基本每次都偏。没跑过 --grid 就画框会直接报错。
 

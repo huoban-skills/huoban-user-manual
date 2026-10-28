@@ -108,7 +108,12 @@ python3 scripts/browser.py shot --path <scratch>/probe-bottom.png
 
 ## 五、标注框与脱敏
 
-`shot --highlight` / `--blur` 靠 CSS selector，控制台类 SPA 的随机 class 匹配不上，这时用 `scripts/annotate.py` 按百分比坐标处理。
+`shot --highlight` 按页面元素画框，有两种写法：CSS 选择器，或 `text=界面原文`。class 是随机字符串、选择器写不出来的（控制台类 SPA、伙伴云的部分按钮），用 `text=` 按界面文字找，命中的是文字完全相等的那个按钮或单元格本身。同一文字有多处时写成 `text=发货|2`，取屏幕上从上往下第 2 个；命中多处时 shot 会提醒。
+
+下面两种情况才用 `scripts/annotate.py` 按百分比坐标处理：
+
+- 画框的目标不是页面元素：画在 canvas 里的图表、跨域 iframe 里的内容、图片里的内容。
+- 打码：`--blur` 只认 CSS 选择器，选择器写不出来时用 annotate.py 的 `--blur`。
 
 ```bash
 python3 scripts/annotate.py <图> --crop 10,75 --grid              # 先量

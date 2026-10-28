@@ -48,7 +48,7 @@ metadata:
 | 册头全流程图（业务流程模块，一册一张） | `python3 scripts/flow.py flow.json images/0-全流程总览.svg` |
 | 渲染预览 + 格式机检 | `python3 scripts/render.py <文档.md> --vocab <采集目录>/vocab.json`；改版任务加 `--baseline <旧版.md>` |
 | 浏览器走查驱动 | `scripts/browser.py`，子命令和参数见脚本头注释 |
-| 控制台类 SPA 画框（CSS 选择器匹配不上时） | `scripts/annotate.py`，没先 `--grid` 量过就画会报错 |
+| 目标不是页面元素时画框（canvas 图表、跨域 iframe），或选择器写不出来时打码 | `scripts/annotate.py`，没先 `--grid` 量过就画会报错 |
 
 **双轨采集**：hac 管逻辑真相（字段配置、自动化逻辑、审批流），浏览器管界面真相（截图、交互细节、提示文案）。二者冲突以界面实测为准，并在 notes.md 标记差异。外部平台和纯平台功能没有 hac 兜底，事实来源以用户提供加界面实测为准，拿不准标 `[待确认]`。
 

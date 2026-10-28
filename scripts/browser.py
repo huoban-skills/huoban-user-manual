@@ -14,6 +14,7 @@
   python3 browser.py scroll --dy 600
   python3 browser.py wait (--ms N | --selector S | --text T)
   python3 browser.py shot --path out.png [--selector S] [--highlight S1,,S2] [--blur S1,,S2] [--full-page]
+                                                            # --highlight 也可写 text=界面原文
   python3 browser.py eval --js "document.title"
   python3 browser.py page --index N                         # 切换活动页面（多标签时）
   python3 browser.py stop
@@ -453,21 +454,40 @@ def cmd_wait(args):
 # 只命中当前可见的元素：页面切换后残留的隐藏节点（如上一页的 .ag-root）、
 # 视口外的元素一律跳过；AG Grid 底部固定统计行（.ag-floating-bottom）不参与框选，
 # 整表框选时数据区下边界收到统计行上沿。
-# 返回命中清单 [{text, rect}]，shot 把它写进截图证据元数据（.meta.json）。
+# 「text=界面原文」按文字找元素：取文字完全相等的最外层可见元素（按钮本身，不是里面的 span），
+# class 是随机哈希的页面也能框；同一文字有多处时用「text=发货|2」取屏幕上从上往下第 2 个。
+# 返回命中清单 [{text, rect, sel}]，shot 把 text、rect 写进截图证据元数据（.meta.json）。
 HIGHLIGHT_ON = """
 (sels) => {
   const items = [];
   const seen = new Set();
-  sels.forEach(s => document.querySelectorAll(s).forEach(el => {
+  const visible = el => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return false;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') return false;
+    if (el.checkVisibility && !el.checkVisibility()) return false;
+    return !el.closest('.ag-floating-bottom');
+  };
+  const norm = x => (x || '').trim().replace(/\\s+/g, ' ');
+  const resolve = s => {
+    if (!s.startsWith('text=')) return [...document.querySelectorAll(s)];
+    let t = s.slice(5), nth = 0;
+    const m = t.match(/^(.*)\\|(\\d+)$/);
+    if (m) { t = m[1]; nth = +m[2]; }
+    const hits = [...document.body.querySelectorAll('*')].filter(el =>
+      norm(el.innerText) === t && !(el.parentElement && norm(el.parentElement.innerText) === t) && visible(el));
+    // 按屏幕上从上到下、从左到右排：AG Grid 的行在 DOM 里不按显示顺序，按 DOM 数第几个会数错
+    const pos = el => el.getBoundingClientRect();
+    hits.sort((a, b) => (pos(a).top - pos(b).top) || (pos(a).left - pos(b).left));
+    return nth ? hits.slice(nth - 1, nth) : hits;
+  };
+  sels.forEach(s => resolve(s).forEach(el => {
     if (seen.has(el)) return;
     seen.add(el);
+    if (!visible(el)) return;
     const r = el.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
-    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return;
-    const cs = getComputedStyle(el);
-    if (cs.visibility === 'hidden' || cs.display === 'none') return;
-    if (el.checkVisibility && !el.checkVisibility()) return;
-    if (el.closest('.ag-floating-bottom')) return;
     let bottom = r.bottom;
     const fb = el.querySelector('.ag-floating-bottom');
     if (fb) {
@@ -481,8 +501,8 @@ HIGHLIGHT_ON = """
       ? (el.getAttribute('aria-label') || el.getAttribute('placeholder') || '')
       : (el.innerText || el.getAttribute('aria-label') || '')).trim().replace(/\\s+/g, ' ');
     if (text.length > 60) text = text.slice(0, 60);
-    items.push({text, rect: [Math.round(r.left), Math.round(r.top),
-                             Math.round(r.right - r.left), Math.round(bottom - r.top)]});
+    items.push({text, sel: s, rect: [Math.round(r.left), Math.round(r.top),
+                                     Math.round(r.right - r.left), Math.round(bottom - r.top)]});
   }));
   const box = document.createElement('div');
   box.id = '__hbHl';
@@ -601,6 +621,10 @@ def cmd_shot(args):
             targets = page.evaluate(HIGHLIGHT_ON, sels) or []
             if not targets:
                 print("⚠ --highlight 选择器没有命中任何可见元素，这张图不会有框")
+            for s in sels:
+                n = sum(1 for t in targets if t.get("sel") == s)
+                if s.startswith("text=") and n > 1:
+                    print(f"⚠ {s} 命中了 {n} 处，都会画框；只要其中一处就写成 {s}|序号")
         if blurs or masks or sels:
             page.wait_for_timeout(200)
         path = Path(args.path)
@@ -691,7 +715,8 @@ def main():
     s.add_argument("--timeout", type=int, default=15000); s.set_defaults(fn=cmd_wait)
     s = sub.add_parser("shot")
     s.add_argument("--path", required=True); s.add_argument("--selector")
-    s.add_argument("--highlight", help="要画标注框的 CSS 选择器，多个用 ,, 分隔（多框按传入顺序自动标序号）")
+    s.add_argument("--highlight", help="要画标注框的 CSS 选择器或 text=界面原文（同文字多处用 text=原文|序号），"
+                                       "多个用 ,, 分隔（多框按传入顺序自动标序号）")
     s.add_argument("--blur", help="要模糊的凭证 CSS 选择器（API key、密钥、令牌、账号密码等，业务数据不打码），多个用 ,, 分隔")
     s.add_argument("--mask", help="不透明遮挡，仅为兼容旧调用保留，手册截图不用；要打码一律用 --blur")
     s.add_argument("--prep", help="截图前在同一次调用里执行的 JS，用来展开下拉/悬停菜单等瞬时界面")
